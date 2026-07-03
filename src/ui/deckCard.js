@@ -39,6 +39,7 @@ function fmtTime(seconds) {
  *   onMute?: () => void,
  *   onEject?: () => void,
  *   onSeek?: (fraction: number) => void,
+ *   onSeekBy?: (deltaFraction: number) => void,
  * }} opts
  */
 export function createDeckCard(container, opts) {
@@ -77,6 +78,15 @@ export function createDeckCard(container, opts) {
   waveform.canvas.setAttribute('aria-valuemin', '0');
   waveform.canvas.setAttribute('aria-valuemax', '100');
   waveform.canvas.tabIndex = 0;
+  waveform.canvas.addEventListener('keydown', (e) => {
+    // Keyboard seek on the focused waveform: ±5%, Home/End jump.
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') opts.onSeekBy?.(-0.05);
+    else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') opts.onSeekBy?.(0.05);
+    else if (e.key === 'Home') opts.onSeek?.(0);
+    else if (e.key === 'End') opts.onSeek?.(0.999);
+    else return;
+    e.preventDefault();
+  });
 
   const controls = document.createElement('div');
   controls.className = 'deck-card__controls';
