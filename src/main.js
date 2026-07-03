@@ -11,6 +11,8 @@ import { createVisualizer } from './visualizer/visualizer.js';
 import { onTick, setSuspended } from './ticker.js';
 import { createEngine } from './audio/engine.js';
 import { Deck } from './audio/deck.js';
+import { createCrossfader } from './audio/crossfader.js';
+import { createFx } from './audio/fx.js';
 import { DEMO_TRACKS, renderDemoLoop } from './audio/demoLoops.js';
 
 const app = /** @type {HTMLElement} */ (document.getElementById('app'));
@@ -23,6 +25,10 @@ visualizer.start();
 let engine = null;
 /** @type {{ a: Deck, b: Deck } | null} */
 let decks = null;
+/** @type {ReturnType<typeof createCrossfader> | null} */
+let crossfader = null;
+/** @type {ReturnType<typeof createFx> | null} */
+let fx = null;
 
 /** @param {'a' | 'b'} id */
 const deck = (id) => (decks ? decks[id] : null);
@@ -35,15 +41,15 @@ const hud = mountHud(app, {
   onCrossfade: (x) => {
     visualizer.setPalette(x);
     updateActiveDecks(x);
-    // Audio-side equal-power fade is wired in the crossfader milestone.
+    crossfader?.set(x);
   },
   onTempo: (rate) => {
     // One global tempo control drives both decks (beginner-friendly).
     deck('a')?.setRate(rate);
     deck('b')?.setRate(rate);
   },
-  onFxHold: () => {
-    // FX chain arrives in the crossfader + FX milestone.
+  onFxHold: (held) => {
+    fx?.setHeld(held);
   },
   deckA: deckCardHandlers('a'),
   deckB: deckCardHandlers('b'),
@@ -132,6 +138,9 @@ async function unlock() {
       a: new Deck(engine.ctx, engine.xfA, 'a'),
       b: new Deck(engine.ctx, engine.xfB, 'b'),
     };
+    fx = createFx(engine);
+    crossfader = createCrossfader(engine);
+    crossfader.set(hud.crossfader.value);
     for (const id of /** @type {const} */ (['a', 'b'])) {
       decks[id].onEnded = () => card(id).setPlaying(false);
     }
@@ -197,7 +206,15 @@ document.addEventListener('keydown', (e) => {
   } else if (e.key === 'ArrowRight') {
     hud.crossfader.nudge(0.05);
     e.preventDefault();
+  } else if (e.key === ' ' && !e.repeat && !target.closest('button, [role="option"], [role="button"]')) {
+    // Space anywhere (except on a focused control that handles it) = FX hold.
+    hud.fx.setHeld(true);
+    e.preventDefault();
   }
+});
+
+document.addEventListener('keyup', (e) => {
+  if (e.key === ' ') hud.fx.setHeld(false);
 });
 
 document.addEventListener('visibilitychange', () => {
