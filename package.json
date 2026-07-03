@@ -4,6 +4,12 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Beginner-friendly browser DJ mixer with a radial track wheel, two decks, and an audio-reactive neon visualizer. 100% client-side.",
+  "license": "MIT",
+  "author": "Lizardkingrick",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lizardkingrick/random-access-jam.git"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",

@@ -109,3 +109,7 @@ Chrome and Firefox. Safari notes:
 
 Pitch-preserving time-stretch, BPM detection + sync, per-deck filters,
 hot cues/loops, mix recording via `MediaRecorder`, Tauri desktop wrapper.
+
+## License
+
+[MIT](LICENSE) — contributions welcome.
