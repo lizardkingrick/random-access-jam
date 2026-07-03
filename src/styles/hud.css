@@ -631,6 +631,39 @@
   }
 }
 
+/* ---------- drop overlay ---------- */
+
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  background: rgba(5, 10, 20, 0.6);
+  border: 3px dashed var(--accent);
+  border-radius: var(--radius-lg);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) ease;
+}
+
+.drop-overlay.is-visible {
+  opacity: 1;
+}
+
+.drop-overlay__box {
+  padding: 22px 44px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel-solid);
+  border: 1px solid var(--accent);
+  box-shadow: var(--glow-accent);
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  letter-spacing: var(--track-mid);
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
 /* ---------- unlock overlay ---------- */
 
 .unlock-overlay {
