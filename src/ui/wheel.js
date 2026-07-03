@@ -60,6 +60,7 @@ function truncate(title) {
  * @param {{
  *   onSelect?: (slot: WheelSlotData, index: number) => void,
  *   onLoadTo?: (slot: WheelSlotData, deckId: 'a' | 'b') => void,
+ *   onRemove?: (slot: WheelSlotData) => void,
  *   onPage?: (delta: number) => void,
  *   onAddTracks?: () => void,
  * }} [opts]
@@ -189,7 +190,7 @@ export function createWheel(container, opts = {}) {
   function requestLoadMenu(i, x, y) {
     const slot = slots[i];
     if (!slot || !opts.onLoadTo) return;
-    openLoadMenu(slot, x, y, opts.onLoadTo);
+    openLoadMenu(slot, x, y, opts.onLoadTo, opts.onRemove);
   }
 
   /** @param {KeyboardEvent} e @param {number} i */
@@ -264,8 +265,9 @@ export function createWheel(container, opts = {}) {
  * @param {WheelSlotData} slot
  * @param {number} x @param {number} y
  * @param {(slot: WheelSlotData, deckId: 'a' | 'b') => void} onLoadTo
+ * @param {((slot: WheelSlotData) => void) | undefined} onRemove
  */
-function openLoadMenu(slot, x, y, onLoadTo) {
+function openLoadMenu(slot, x, y, onLoadTo, onRemove) {
   document.querySelector('.wheel-menu')?.remove();
   const menu = document.createElement('div');
   menu.className = 'wheel-menu panel';
@@ -281,6 +283,19 @@ function openLoadMenu(slot, x, y, onLoadTo) {
     item.addEventListener('click', () => {
       close();
       onLoadTo(slot, deckId);
+    });
+    menu.append(item);
+  }
+
+  if (onRemove) {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'wheel-menu__item wheel-menu__item--danger';
+    item.setAttribute('role', 'menuitem');
+    item.textContent = 'Remove from library';
+    item.addEventListener('click', () => {
+      close();
+      onRemove(slot);
     });
     menu.append(item);
   }
