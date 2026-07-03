@@ -10,6 +10,7 @@ import { mountHud } from './ui/hud.js';
 import { showToast } from './ui/toasts.js';
 import { SLOTS_PER_PAGE } from './ui/wheel.js';
 import { createVisualizer } from './visualizer/visualizer.js';
+import { createBeatDetector } from './visualizer/beat.js';
 import { onTick, setSuspended } from './ticker.js';
 import { createEngine } from './audio/engine.js';
 import { Deck } from './audio/deck.js';
@@ -122,7 +123,7 @@ updateActiveDecks(0.5);
 
 // ---------- per-frame UI sync ----------
 
-onTick(() => {
+onTick((dt) => {
   if (!decks) return;
   for (const id of /** @type {const} */ (['a', 'b'])) {
     const d = decks[id];
@@ -132,7 +133,47 @@ onTick(() => {
     c.waveform.setProgress(d.duration ? d.position / d.duration : 0);
     c.waveform.render();
   }
+  updateAudioLevels(dt);
 });
+
+// ---------- analyser → visualizer ----------
+
+const beatDetector = createBeatDetector();
+/** @type {Uint8Array | null} */
+let freqData = null;
+let wasAudible = false;
+
+/** @param {number} dt */
+function updateAudioLevels(dt) {
+  if (!engine || !decks) return;
+  const audible = decks.a.playing || decks.b.playing;
+  if (!audible) {
+    if (wasAudible) {
+      visualizer.setLevels({ low: 0, mid: 0, high: 0 });
+      beatDetector.reset();
+      wasAudible = false;
+    }
+    return;
+  }
+  wasAudible = true;
+
+  const analyser = engine.analyser;
+  if (!freqData) freqData = new Uint8Array(analyser.frequencyBinCount);
+  analyser.getByteFrequencyData(freqData);
+
+  const binHz = engine.ctx.sampleRate / analyser.fftSize;
+  const band = (/** @type {number} */ from, /** @type {number} */ to) => {
+    const i0 = Math.max(1, Math.floor(from / binHz));
+    const i1 = Math.min(freqData.length - 1, Math.ceil(to / binHz));
+    let sum = 0;
+    for (let i = i0; i <= i1; i++) sum += freqData[i];
+    return sum / ((i1 - i0 + 1) * 255);
+  };
+
+  const low = band(30, 250);
+  visualizer.setLevels({ low, mid: band(250, 2000), high: band(2000, 9000) });
+  if (beatDetector.update(low, dt)) visualizer.onBeat();
+}
 
 // ---------- library ----------
 
