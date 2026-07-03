@@ -631,6 +631,67 @@
   }
 }
 
+/* ---------- unlock overlay ---------- */
+
+.unlock-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  background: rgba(3, 4, 8, 0.78);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: opacity var(--dur-med) ease;
+}
+
+.unlock-overlay.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.unlock-overlay__btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 40px 60px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--stroke-bright);
+  background: var(--bg-panel);
+  box-shadow: var(--glow-accent);
+}
+
+.unlock-overlay__title {
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  letter-spacing: var(--track-wide);
+  text-transform: uppercase;
+  text-shadow: var(--glow-text);
+}
+
+.unlock-overlay__title em {
+  font-style: normal;
+  color: var(--accent);
+}
+
+.unlock-overlay__hint {
+  font-size: var(--fs-sm);
+  letter-spacing: var(--track-mid);
+  color: var(--text-mid);
+  animation: hint-pulse 2.2s ease-in-out infinite;
+}
+
+@keyframes hint-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 /* ---------- responsive ---------- */
 
 @media (max-width: 900px) {
