@@ -17,8 +17,9 @@ import { Deck } from './audio/deck.js';
 import { createCrossfader } from './audio/crossfader.js';
 import { createFx } from './audio/fx.js';
 import { DEMO_TRACKS, renderDemoLoop, audioBufferToWavBlob } from './audio/demoLoops.js';
-import { getAllTracks, getTrack, putTrack } from './library/store.js';
+import { getAllTracks, getTrack, putTrack, deleteTrack, clearLibrary } from './library/store.js';
 import { initIntake } from './library/intake.js';
+import { createHelp } from './ui/help.js';
 
 const app = /** @type {HTMLElement} */ (document.getElementById('app'));
 const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById('visualizer'));
@@ -70,6 +71,7 @@ const hud = mountHud(app, {
       loadTrackToDeck(slot.id, target);
     },
     onLoadTo: (slot, deckId) => loadTrackToDeck(slot.id, deckId),
+    onRemove: (slot) => removeTrack(slot.id),
     onPage: (delta) => {
       page += delta;
       refreshWheel();
@@ -258,6 +260,42 @@ async function loadTrackToDeck(trackId, deckId, opts = {}) {
   }
 }
 
+/** Remove a track from the library (demo loops can't be removed). @param {string} trackId */
+async function removeTrack(trackId) {
+  const record = library.find((r) => r.id === trackId);
+  if (!record) return;
+  if (record.demo) {
+    showToast('The demo loops are built in — they stay on the wheel.');
+    return;
+  }
+  try {
+    await deleteTrack(trackId);
+    library = library.filter((r) => r.id !== trackId);
+    refreshWheel();
+    showToast(`Removed “${record.title}” from the library.`, { type: 'success' });
+  } catch (err) {
+    console.error(err);
+    showToast('Could not remove that track — try again.', { type: 'error' });
+  }
+}
+
+// ---------- help overlay ----------
+
+createHelp(app, {
+  onClearLibrary: async () => {
+    try {
+      await clearLibrary();
+      library = library.filter((r) => r.demo);
+      page = 0;
+      refreshWheel();
+      showToast('Library cleared — demo loops kept.', { type: 'success' });
+    } catch (err) {
+      console.error(err);
+      showToast('Could not clear the library — try again.', { type: 'error' });
+    }
+  },
+});
+
 // ---------- audio unlock ----------
 
 const overlay = document.createElement('div');
@@ -347,3 +385,13 @@ document.addEventListener('visibilitychange', () => {
   // Suspend all animation when the tab is hidden and nothing is playing.
   setSuspended(document.hidden && !anyPlaying);
 });
+
+// ---------- PWA service worker (no-op in dev) ----------
+
+if ('serviceWorker' in navigator) {
+  import('virtual:pwa-register')
+    .then(({ registerSW }) => registerSW({ immediate: true }))
+    .catch(() => {
+      // Offline support is progressive enhancement — the app runs without it.
+    });
+}
