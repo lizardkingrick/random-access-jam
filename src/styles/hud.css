@@ -577,7 +577,7 @@
 /* ---------- toasts ---------- */
 
 .toast-stack {
-  position: absolute;
+  position: fixed;
   top: max(12px, env(safe-area-inset-top));
   left: 50%;
   transform: translateX(-50%);
@@ -585,7 +585,7 @@
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  z-index: 20;
+  z-index: 60; /* above every overlay so feedback is never hidden */
   pointer-events: none;
   width: min(440px, 92vw);
 }
@@ -746,6 +746,10 @@
 .help-btn:hover {
   color: var(--accent);
   box-shadow: var(--glow-accent);
+}
+
+.help-overlay[hidden] {
+  display: none;
 }
 
 .help-overlay {
