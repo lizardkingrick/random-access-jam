@@ -87,6 +87,8 @@ export class Deck {
 
   play() {
     if (!this.buffer || this.playing) return;
+    // Pressing play on a track that finished restarts it from the top.
+    if (!this.loop && this.duration && this.offset >= this.duration - 0.01) this.offset = 0;
     const ctx = this.ctx;
     const source = ctx.createBufferSource();
     source.buffer = this.buffer;

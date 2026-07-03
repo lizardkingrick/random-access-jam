@@ -105,6 +105,11 @@ function deckCardHandlers(id) {
       if (!d || !d.buffer) return;
       d.seekFraction(fraction);
     },
+    onSeekBy: (/** @type {number} */ delta) => {
+      const d = deck(id);
+      if (!d || !d.buffer || !d.duration) return;
+      d.seekFraction(Math.min(Math.max(d.position / d.duration + delta, 0), 0.999));
+    },
   };
 }
 
@@ -276,6 +281,7 @@ overlay.addEventListener('keydown', (e) => {
 // ---------- global keys + tab visibility ----------
 
 document.addEventListener('keydown', (e) => {
+  if (e.defaultPrevented) return; // a control (waveform, wheel, …) already handled it
   const target = /** @type {HTMLElement} */ (e.target);
   if (target.closest('input, textarea, [contenteditable]')) return;
   if (e.key === 'ArrowLeft') {
