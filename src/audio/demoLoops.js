@@ -17,12 +17,20 @@ export const DEMO_TRACKS = [
     title: 'Neon Causeway',
     artist: 'Built-in demo · 120 BPM',
     color: 'hsl(160, 90%, 60%)',
+    sourceBpm: BPM,
+    sourceKey: 'A minor',
+    bars: BARS,
+    roles: /** @type {import('../library/store.js').StemRole[]} */ (['drums', 'bass', 'lead']),
   },
   {
     id: 'demo-midnight-reactor',
     title: 'Midnight Reactor',
     artist: 'Built-in demo · 120 BPM',
     color: 'hsl(250, 90%, 70%)',
+    sourceBpm: BPM,
+    sourceKey: 'E minor',
+    bars: BARS,
+    roles: /** @type {import('../library/store.js').StemRole[]} */ (['drums', 'bass', 'lead']),
   },
 ];
 
@@ -179,50 +187,59 @@ function stab(ctx, out, t, notes, dur, o = {}) {
 }
 
 /**
- * "Neon Causeway" — driving four-on-floor house groove in A minor.
- * @param {OfflineAudioContext} ctx @param {AudioNode} out @param {AudioBuffer} noise
+ * @typedef {{ drums: AudioNode, bass: AudioNode, lead: AudioNode }} RoleBuses
  */
-function scoreNeonCauseway(ctx, out, noise) {
+
+/**
+ * "Neon Causeway" — driving four-on-floor house groove in A minor.
+ * Each musical voice routes to its role bus so stems render separately.
+ * @param {OfflineAudioContext} ctx @param {RoleBuses} buses @param {AudioBuffer} noise
+ */
+function scoreNeonCauseway(ctx, buses, noise) {
   const bassLine = ['A1', 'A1', 'C2', 'A1', 'G1', 'G1', 'A1', 'B1'];
   for (let bar = 0; bar < BARS; bar++) {
     const t0 = bar * 4 * BEAT;
     for (let b = 0; b < 4; b++) {
       const t = t0 + b * BEAT;
-      kick(ctx, out, t);
-      hat(ctx, noise, out, t + BEAT / 2, { pan: b % 2 ? 0.35 : -0.35 });
-      if (b === 3 && bar % 2 === 1) hat(ctx, noise, out, t + BEAT * 0.75, { open: true, pan: 0.2 });
+      kick(ctx, buses.drums, t);
+      hat(ctx, noise, buses.drums, t + BEAT / 2, { pan: b % 2 ? 0.35 : -0.35 });
+      if (b === 3 && bar % 2 === 1)
+        hat(ctx, noise, buses.drums, t + BEAT * 0.75, { open: true, pan: 0.2 });
     }
     // 8th-note bassline, two notes per beat
     for (let n = 0; n < 8; n++) {
       const note = bassLine[(bar * 8 + n) % bassLine.length];
-      bass(ctx, out, t0 + n * (BEAT / 2), note, BEAT / 2 - 0.02, { cutoff: n % 2 ? 700 : 460 });
+      bass(ctx, buses.bass, t0 + n * (BEAT / 2), note, BEAT / 2 - 0.02, {
+        cutoff: n % 2 ? 700 : 460,
+      });
     }
     // Am7 stab on the 1 and the "and" of 2
-    stab(ctx, out, t0, ['A3', 'C4', 'E4', 'G4'], 0.4);
-    stab(ctx, out, t0 + 1.5 * BEAT, ['A3', 'C4', 'E4'], 0.25, { level: 0.06, pan: 0.3 });
+    stab(ctx, buses.lead, t0, ['A3', 'C4', 'E4', 'G4'], 0.4);
+    stab(ctx, buses.lead, t0 + 1.5 * BEAT, ['A3', 'C4', 'E4'], 0.25, { level: 0.06, pan: 0.3 });
   }
 }
 
 /**
  * "Midnight Reactor" — moodier syncopated electro groove in E minor.
- * @param {OfflineAudioContext} ctx @param {AudioNode} out @param {AudioBuffer} noise
+ * @param {OfflineAudioContext} ctx @param {RoleBuses} buses @param {AudioBuffer} noise
  */
-function scoreMidnightReactor(ctx, out, noise) {
+function scoreMidnightReactor(ctx, buses, noise) {
   const kicks = [0, 0.75, 1.5, 2, 2.75, 3.5]; // in beats, syncopated
   const arp = ['E3', 'G3', 'B3', 'D4', 'E4', 'D4', 'B3', 'G3'];
   for (let bar = 0; bar < BARS; bar++) {
     const t0 = bar * 4 * BEAT;
-    for (const kb of kicks) kick(ctx, out, t0 + kb * BEAT, { punch: 0.85 });
-    snare(ctx, noise, out, t0 + 1 * BEAT);
-    snare(ctx, noise, out, t0 + 3 * BEAT);
+    for (const kb of kicks) kick(ctx, buses.drums, t0 + kb * BEAT, { punch: 0.85 });
+    snare(ctx, noise, buses.drums, t0 + 1 * BEAT);
+    snare(ctx, noise, buses.drums, t0 + 3 * BEAT);
     for (let s = 0; s < 16; s++) {
-      if (s % 2 === 1) hat(ctx, noise, out, t0 + s * (BEAT / 4), { pan: s % 4 === 1 ? -0.4 : 0.4 });
+      if (s % 2 === 1)
+        hat(ctx, noise, buses.drums, t0 + s * (BEAT / 4), { pan: s % 4 === 1 ? -0.4 : 0.4 });
     }
     // 16th-note arp, skipping a few steps for syncopation
     for (let s = 0; s < 16; s++) {
       if (s % 8 === 6) continue;
       const note = arp[(s + bar * 2) % arp.length];
-      stab(ctx, out, t0 + s * (BEAT / 4), [note], BEAT / 4, {
+      stab(ctx, buses.lead, t0 + s * (BEAT / 4), [note], BEAT / 4, {
         type: 'square',
         level: 0.045,
         detune: 3,
@@ -230,8 +247,11 @@ function scoreMidnightReactor(ctx, out, noise) {
       });
     }
     // long dark bass root
-    bass(ctx, out, t0, 'E1', 2 * BEAT, { level: 0.3, cutoff: 300 });
-    bass(ctx, out, t0 + 2 * BEAT, bar % 2 ? 'G1' : 'E1', 2 * BEAT, { level: 0.3, cutoff: 300 });
+    bass(ctx, buses.bass, t0, 'E1', 2 * BEAT, { level: 0.3, cutoff: 300 });
+    bass(ctx, buses.bass, t0 + 2 * BEAT, bar % 2 ? 'G1' : 'E1', 2 * BEAT, {
+      level: 0.3,
+      cutoff: 300,
+    });
   }
 }
 
@@ -278,26 +298,31 @@ export function audioBufferToWavBlob(buffer) {
 }
 
 /**
- * Render one demo loop to an AudioBuffer.
+ * Render ONE role's stem of a demo loop to an AudioBuffer. The score plays in
+ * full but only the requested role's bus reaches the destination, so each stem
+ * renders isolated and sample-aligned with its siblings.
  * @param {string} id one of DEMO_TRACKS ids
+ * @param {import('../library/store.js').StemRole} role
  * @returns {Promise<AudioBuffer>}
  */
-export async function renderDemoLoop(id) {
+export async function renderDemoStem(id, role) {
   const OAC = window.OfflineAudioContext || /** @type {any} */ (window).webkitOfflineAudioContext;
   const ctx = new OAC(2, Math.round(DURATION * SAMPLE_RATE), SAMPLE_RATE);
 
-  const bus = ctx.createGain();
-  bus.gain.value = 0.9;
-  const comp = ctx.createDynamicsCompressor();
-  comp.threshold.value = -14;
-  comp.ratio.value = 4;
-  comp.attack.value = 0.004;
-  comp.release.value = 0.18;
-  bus.connect(comp).connect(ctx.destination);
+  /** @type {Record<'drums' | 'bass' | 'lead', GainNode>} */
+  const buses = {
+    drums: ctx.createGain(),
+    bass: ctx.createGain(),
+    lead: ctx.createGain(),
+  };
+  for (const [name, bus] of Object.entries(buses)) {
+    bus.gain.value = name === role ? 0.9 : 0;
+    bus.connect(ctx.destination);
+  }
 
   const noise = makeNoiseBuffer(ctx);
-  if (id === 'demo-neon-causeway') scoreNeonCauseway(ctx, bus, noise);
-  else if (id === 'demo-midnight-reactor') scoreMidnightReactor(ctx, bus, noise);
+  if (id === 'demo-neon-causeway') scoreNeonCauseway(ctx, buses, noise);
+  else if (id === 'demo-midnight-reactor') scoreMidnightReactor(ctx, buses, noise);
   else throw new Error(`Unknown demo loop: ${id}`);
 
   return ctx.startRendering();
