@@ -877,6 +877,87 @@
   color: var(--danger);
 }
 
+/* ---------- stem assign dialog ---------- */
+
+.assign-dialog {
+  width: min(520px, 94vw);
+}
+
+.assign-dialog__files {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.assign-file {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.assign-file__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-sm);
+  color: var(--text-mid);
+}
+
+.assign-dialog select,
+.assign-dialog input {
+  min-height: 38px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--stroke-dim);
+  background: var(--bg-inset);
+  color: var(--text-hi);
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+}
+
+.assign-dialog select:focus-visible,
+.assign-dialog input:focus-visible {
+  border-color: var(--accent);
+  box-shadow: var(--glow-accent);
+}
+
+.assign-dialog__meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 14px;
+  margin-top: 6px;
+}
+
+.assign-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.assign-field > span:first-child {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: var(--track-wide);
+  text-transform: uppercase;
+  color: var(--text-low);
+}
+
+.assign-field--wide {
+  grid-column: 1 / -1;
+}
+
+.assign-field__pair {
+  display: flex;
+  gap: 8px;
+}
+
+.assign-field__pair select {
+  flex: 1;
+}
+
 /* ---------- responsive ---------- */
 
 @media (max-width: 900px) {

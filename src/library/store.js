@@ -1,26 +1,33 @@
 // @ts-check
 /**
- * IndexedDB wrapper for the track library. Each record stores the ORIGINAL
- * audio Blob (decoded buffers are huge — they're re-decoded on demand) plus
- * lightweight metadata used to populate the wheel.
+ * IndexedDB wrapper for the track library.
+ *
+ * v2 schema: one record = one STEM SET. Any subset of the 4 roles is allowed;
+ * original audio Blobs are stored per stem (decoded buffers are huge — they're
+ * re-decoded/conformed on demand).
+ *
+ * Migration v1→v2: old single-file tracks become a stem set with their blob as
+ * the "lead" stem (bpm/key default until the user edits or auto-detect runs).
+ * Old demo records are deleted — demos are regenerated as proper stem sets.
+ *
+ * @typedef {'vocals' | 'drums' | 'bass' | 'lead'} StemRole
  *
  * @typedef {{
  *   id: string,
  *   title: string,
  *   artist: string,
- *   type: string,
- *   size: number,
- *   duration: number,
+ *   sourceBpm: number,
+ *   sourceKey: string,        // e.g. "A minor"
+ *   bars: number,             // loop length in bars (4/4 assumed)
+ *   stems: Partial<Record<StemRole, { blob: Blob }>>,
  *   color: string,
  *   demo: boolean,
- *   loop: boolean,
  *   addedAt: number,
- *   blob: Blob,
  * }} TrackRecord
  */
 
 const DB_NAME = 'raj-library';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE = 'tracks';
 
 /** @type {Promise<IDBDatabase> | null} */
@@ -30,11 +37,43 @@ function open() {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
+    req.onupgradeneeded = (e) => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) {
         db.createObjectStore(STORE, { keyPath: 'id' });
+        return;
       }
+      // v1 → v2: rewrite records inside the upgrade transaction.
+      const tx = /** @type {IDBTransaction} */ (req.transaction);
+      const store = tx.objectStore(STORE);
+      store.openCursor().onsuccess = (ev) => {
+        const cursor = /** @type {IDBCursorWithValue} */ (
+          /** @type {IDBRequest} */ (ev.target).result
+        );
+        if (!cursor) return;
+        const old = cursor.value;
+        if (old && !old.stems) {
+          if (old.demo) {
+            cursor.delete(); // demos are regenerated as stem sets
+          } else {
+            /** @type {TrackRecord} */
+            const migrated = {
+              id: old.id,
+              title: old.title,
+              artist: old.artist ?? 'Your library',
+              sourceBpm: 120,
+              sourceKey: 'C major',
+              bars: 16,
+              stems: { lead: { blob: old.blob } },
+              color: old.color ?? '#35c9ff',
+              demo: false,
+              addedAt: old.addedAt ?? Date.now(),
+            };
+            cursor.update(migrated);
+          }
+        }
+        cursor.continue();
+      };
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error ?? new Error('Could not open the track library.'));
@@ -60,7 +99,7 @@ async function tx(mode) {
   return db.transaction(STORE, mode).objectStore(STORE);
 }
 
-/** All tracks, demos first, then oldest-added first. @returns {Promise<TrackRecord[]>} */
+/** All stem sets, demos first, then oldest-added first. @returns {Promise<TrackRecord[]>} */
 export async function getAllTracks() {
   const store = await tx('readonly');
   const all = /** @type {TrackRecord[]} */ (await promisify(store.getAll()));
@@ -74,7 +113,7 @@ export async function getTrack(id) {
 }
 
 /**
- * Persist a track. Rethrows QuotaExceededError with a friendly message.
+ * Persist a stem set. Rethrows QuotaExceededError with a friendly message.
  * @param {TrackRecord} record
  */
 export async function putTrack(record) {
@@ -100,4 +139,11 @@ export async function clearLibrary() {
   const all = await getAllTracks();
   const store = await tx('readwrite');
   await Promise.all(all.filter((t) => !t.demo).map((t) => promisify(store.delete(t.id))));
+}
+
+/** Roles present on a record, in canonical order. @param {TrackRecord} record */
+export function rolesOf(record) {
+  return /** @type {StemRole[]} */ (
+    ['vocals', 'drums', 'bass', 'lead'].filter((r) => record.stems[/** @type {StemRole} */ (r)])
+  );
 }

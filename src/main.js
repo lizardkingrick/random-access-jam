@@ -18,7 +18,7 @@ import { createCrossfader } from './audio/crossfader.js';
 import { createFx } from './audio/fx.js';
 import { Transport, createMetronome } from './audio/transport.js';
 import { JamRack, ROLES } from './audio/jamRack.js';
-import { DEMO_TRACKS, renderDemoLoop, audioBufferToWavBlob } from './audio/demoLoops.js';
+import { DEMO_TRACKS, renderDemoStem, audioBufferToWavBlob } from './audio/demoLoops.js';
 import { getAllTracks, getTrack, putTrack, deleteTrack, clearLibrary } from './library/store.js';
 import { initIntake } from './library/intake.js';
 import { createHelp } from './ui/help.js';
@@ -208,26 +208,71 @@ function refreshWheel() {
   hud.wheel.setPage(page, pageCount);
 }
 
-/** Render (or reuse cached) demo loops so the app is playable with no uploads. */
+/** Render (or reuse cached) demo STEM SETS so the app is playable with no uploads. */
 async function ensureDemoTracks() {
   for (const demo of DEMO_TRACKS) {
     const existing = await getTrack(demo.id).catch(() => undefined);
-    if (existing) continue;
-    const buffer = await renderDemoLoop(demo.id);
+    if (existing?.stems) continue;
+    /** @type {import('./library/store.js').TrackRecord['stems']} */
+    const stems = {};
+    for (const role of demo.roles) {
+      const buffer = await renderDemoStem(demo.id, role);
+      stems[role] = { blob: audioBufferToWavBlob(buffer) };
+    }
     await putTrack({
       id: demo.id,
       title: demo.title,
       artist: demo.artist,
-      type: 'audio/wav',
-      size: 0,
-      duration: buffer.duration,
+      sourceBpm: demo.sourceBpm,
+      sourceKey: demo.sourceKey,
+      bars: demo.bars,
+      stems,
       color: demo.color,
       demo: true,
-      loop: true,
       addedAt: 0,
-      blob: audioBufferToWavBlob(buffer),
     });
   }
+}
+
+/**
+ * Decode a record's stems. Returns a map of role → AudioBuffer.
+ * @param {import('./library/store.js').TrackRecord} record
+ */
+async function decodeStems(record) {
+  if (!engine) throw new Error('Audio engine is unavailable.');
+  const ctx = engine.ctx;
+  /** @type {Partial<Record<import('./library/store.js').StemRole, AudioBuffer>>} */
+  const buffers = {};
+  for (const [role, stem] of Object.entries(record.stems)) {
+    if (!stem) continue;
+    const bytes = await stem.blob.arrayBuffer();
+    buffers[/** @type {import('./library/store.js').StemRole} */ (role)] =
+      await ctx.decodeAudioData(bytes.slice(0));
+  }
+  return buffers;
+}
+
+/**
+ * Interim (until the rack UI phase): mix a stem set down to one buffer so the
+ * old two-deck UI can still play whole tracks.
+ * @param {Partial<Record<string, AudioBuffer>>} buffers
+ */
+function mixStems(buffers) {
+  if (!engine) throw new Error('Audio engine is unavailable.');
+  const parts = Object.values(buffers).filter(Boolean);
+  if (parts.length === 0) throw new Error('No stems to mix.');
+  if (parts.length === 1) return /** @type {AudioBuffer} */ (parts[0]);
+  const length = Math.max(...parts.map((b) => b.length));
+  const rate = parts[0].sampleRate;
+  const out = engine.ctx.createBuffer(2, length, rate);
+  for (let ch = 0; ch < 2; ch++) {
+    const dest = out.getChannelData(ch);
+    for (const part of parts) {
+      const src = part.getChannelData(Math.min(ch, part.numberOfChannels - 1));
+      for (let i = 0; i < src.length; i++) dest[i] += src[i];
+    }
+  }
+  return out;
 }
 
 /**
@@ -246,11 +291,10 @@ async function loadTrackToDeck(trackId, deckId, opts = {}) {
     return;
   }
   try {
-    const bytes = await record.blob.arrayBuffer();
-    const buffer = await engine.ctx.decodeAudioData(bytes.slice(0));
+    const buffer = mixStems(await decodeStems(record));
     const autoplay = opts.autoplay ?? d.playing;
     d.load(buffer, { id: record.id, title: record.title, artist: record.artist }, {
-      loop: record.loop,
+      loop: record.demo,
       autoplay,
     });
     d.setRate(hud.tempo.rate);
@@ -396,7 +440,9 @@ async function doUnlock() {
     assignTrack: async (/** @type {any} */ role, /** @type {string} */ trackId) => {
       const record = library.find((r) => r.id === trackId) ?? library[0];
       if (!record || !engine || !rack || !transport) return 'no track';
-      const bytes = await record.blob.arrayBuffer();
+      const stem = record.stems[/** @type {any} */ (role)] ?? Object.values(record.stems)[0];
+      if (!stem) return `no stem for ${role}`;
+      const bytes = await stem.blob.arrayBuffer();
       const buffer = await engine.ctx.decodeAudioData(bytes.slice(0));
       rack.assignPosition(role, { trackId: record.id, title: record.title, buffer });
       if (!transport.isPlaying) transport.start();
