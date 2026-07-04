@@ -17,6 +17,7 @@ import { Deck } from './audio/deck.js';
 import { createCrossfader } from './audio/crossfader.js';
 import { createFx } from './audio/fx.js';
 import { Transport, createMetronome } from './audio/transport.js';
+import { JamRack, ROLES } from './audio/jamRack.js';
 import { DEMO_TRACKS, renderDemoLoop, audioBufferToWavBlob } from './audio/demoLoops.js';
 import { getAllTracks, getTrack, putTrack, deleteTrack, clearLibrary } from './library/store.js';
 import { initIntake } from './library/intake.js';
@@ -40,6 +41,8 @@ let fx = null;
 let transport = null;
 /** @type {ReturnType<typeof createMetronome> | null} */
 let metronome = null;
+/** @type {JamRack | null} */
+let rack = null;
 
 /** @type {import('./library/store.js').TrackRecord[]} */
 let library = [];
@@ -375,8 +378,31 @@ async function doUnlock() {
   transport = new Transport(engine.ctx);
   metronome = createMetronome(engine.ctx, transport, engine.master);
   mountMetronomeButton();
-  // Console access for grid experiments: __raj.transport.setBpm(140) etc.
-  /** @type {any} */ (window).__raj = { transport, metronome, engine };
+
+  // Phase 2: the 4-position jam rack (console-driven until the rack UI phase).
+  rack = new JamRack(engine.ctx, transport, engine.fxIn);
+
+  // Console access for grid/rack experiments until the rack UI lands:
+  //   __raj.transport.setBpm(140)
+  //   __raj.assignTrack('drums', '<trackId>')  — any library track into a role
+  //   __raj.rack.solo('drums', true)
+  /** @type {any} */ (window).__raj = {
+    transport,
+    metronome,
+    engine,
+    rack,
+    ROLES,
+    library: () => library.map((r) => ({ id: r.id, title: r.title })),
+    assignTrack: async (/** @type {any} */ role, /** @type {string} */ trackId) => {
+      const record = library.find((r) => r.id === trackId) ?? library[0];
+      if (!record || !engine || !rack || !transport) return 'no track';
+      const bytes = await record.blob.arrayBuffer();
+      const buffer = await engine.ctx.decodeAudioData(bytes.slice(0));
+      rack.assignPosition(role, { trackId: record.id, title: record.title, buffer });
+      if (!transport.isPlaying) transport.start();
+      return `${record.title} → ${role}`;
+    },
+  };
 
   overlay.classList.add('is-hidden');
   setTimeout(() => overlay.remove(), 400);
