@@ -16,6 +16,7 @@ import { createEngine } from './audio/engine.js';
 import { Deck } from './audio/deck.js';
 import { createCrossfader } from './audio/crossfader.js';
 import { createFx } from './audio/fx.js';
+import { Transport, createMetronome } from './audio/transport.js';
 import { DEMO_TRACKS, renderDemoLoop, audioBufferToWavBlob } from './audio/demoLoops.js';
 import { getAllTracks, getTrack, putTrack, deleteTrack, clearLibrary } from './library/store.js';
 import { initIntake } from './library/intake.js';
@@ -35,6 +36,10 @@ let decks = null;
 let crossfader = null;
 /** @type {ReturnType<typeof createFx> | null} */
 let fx = null;
+/** @type {Transport | null} */
+let transport = null;
+/** @type {ReturnType<typeof createMetronome> | null} */
+let metronome = null;
 
 /** @type {import('./library/store.js').TrackRecord[]} */
 let library = [];
@@ -296,6 +301,33 @@ createHelp(app, {
   },
 });
 
+/**
+ * TEMPORARY (Phase 1): a metronome toggle in the top-left cluster so the
+ * transport grid is audible. Removed when the jam rack lands.
+ */
+function mountMetronomeButton() {
+  const top = hud.hud.querySelector('.hud-top');
+  if (!top || !transport || !metronome) return;
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'fx-btn metro-btn';
+  btn.setAttribute('aria-pressed', 'false');
+  const render = () => {
+    btn.innerHTML = `Metronome<small>${metronome?.enabled ? `on — ${transport?.bpm} BPM` : 'temp · Phase 1'}</small>`;
+  };
+  render();
+  btn.addEventListener('click', () => {
+    if (!metronome || !transport) return;
+    const on = metronome.toggle();
+    if (!on && transport.isPlaying) transport.stop();
+    btn.classList.toggle('is-held', on);
+    btn.setAttribute('aria-pressed', String(on));
+    render();
+  });
+  transport.on('gridChanged', render);
+  top.append(btn);
+}
+
 // ---------- audio unlock ----------
 
 const overlay = document.createElement('div');
@@ -338,6 +370,13 @@ async function doUnlock() {
   fx = createFx(engine);
   crossfader = createCrossfader(engine);
   crossfader.set(hud.crossfader.value);
+
+  // Phase 1: master transport clock + temporary metronome proof.
+  transport = new Transport(engine.ctx);
+  metronome = createMetronome(engine.ctx, transport, engine.master);
+  mountMetronomeButton();
+  // Console access for grid experiments: __raj.transport.setBpm(140) etc.
+  /** @type {any} */ (window).__raj = { transport, metronome, engine };
 
   overlay.classList.add('is-hidden');
   setTimeout(() => overlay.remove(), 400);
