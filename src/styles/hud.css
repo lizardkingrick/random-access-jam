@@ -150,6 +150,12 @@
   color: var(--accent);
 }
 
+/* TEMPORARY (Phase 1): metronome proof button — removed with the jam rack */
+.metro-btn {
+  min-width: 150px;
+  min-height: 52px;
+}
+
 /* ---------- decks (lower-left) ---------- */
 
 .hud-decks {
