@@ -18,7 +18,6 @@ import { createCrossfader } from './audio/crossfader.js';
 import { createFx } from './audio/fx.js';
 import { Transport, createMetronome } from './audio/transport.js';
 import { JamRack, ROLES } from './audio/jamRack.js';
-import { renderToGrid, parseKey } from './audio/timestretch.js';
 import { DEMO_TRACKS, renderDemoStem, audioBufferToWavBlob } from './audio/demoLoops.js';
 import { getAllTracks, getTrack, putTrack, deleteTrack, clearLibrary } from './library/store.js';
 import { initIntake } from './library/intake.js';
@@ -332,6 +331,8 @@ async function loadTrackToDeck(trackId, deckId, opts = {}) {
  */
 async function conform(record, role, raw) {
   if (!transport) throw new Error('Transport not ready.');
+  // Lazy-load the stretch engine (vendored WASM) — keeps it off the critical path.
+  const { renderToGrid, parseKey } = await import('./audio/timestretch.js');
   const cacheKey = `${record.id}:${role}:${transport.bpm}:${parseKey(masterKey).pc}`;
   const hit = conformCache.get(cacheKey);
   if (hit) return hit;
