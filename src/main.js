@@ -18,6 +18,7 @@ import { createCrossfader } from './audio/crossfader.js';
 import { createFx } from './audio/fx.js';
 import { Transport, createMetronome } from './audio/transport.js';
 import { JamRack, ROLES } from './audio/jamRack.js';
+import { renderToGrid, parseKey } from './audio/timestretch.js';
 import { DEMO_TRACKS, renderDemoStem, audioBufferToWavBlob } from './audio/demoLoops.js';
 import { getAllTracks, getTrack, putTrack, deleteTrack, clearLibrary } from './library/store.js';
 import { initIntake } from './library/intake.js';
@@ -43,6 +44,15 @@ let transport = null;
 let metronome = null;
 /** @type {JamRack | null} */
 let rack = null;
+/** Master musical key the whole rack conforms to. */
+let masterKey = 'A minor';
+/**
+ * What each rack position is sourced from (for re-conforms on grid changes).
+ * @type {Partial<Record<import('./audio/jamRack.js').Role, { record: import('./library/store.js').TrackRecord, raw: AudioBuffer }>>}
+ */
+const rackSources = {};
+/** Conformed-buffer cache: `${trackId}:${role}:${bpm}:${keyPc}` → AudioBuffer */
+const conformCache = new Map();
 
 /** @type {import('./library/store.js').TrackRecord[]} */
 let library = [];
@@ -312,6 +322,91 @@ async function loadTrackToDeck(trackId, deckId, opts = {}) {
   }
 }
 
+// ---------- conform-to-grid pipeline (rack) ----------
+
+/**
+ * Conform one raw stem to the current master grid (BPM + key), cached.
+ * @param {import('./library/store.js').TrackRecord} record
+ * @param {import('./audio/jamRack.js').Role} role
+ * @param {AudioBuffer} raw
+ */
+async function conform(record, role, raw) {
+  if (!transport) throw new Error('Transport not ready.');
+  const cacheKey = `${record.id}:${role}:${transport.bpm}:${parseKey(masterKey).pc}`;
+  const hit = conformCache.get(cacheKey);
+  if (hit) return hit;
+  const rendered = await renderToGrid(
+    raw,
+    record.sourceBpm,
+    record.sourceKey,
+    transport.bpm,
+    masterKey,
+    record.bars
+  );
+  // Keep the cache small — grid changes invalidate most entries anyway.
+  if (conformCache.size > 24) conformCache.clear();
+  conformCache.set(cacheKey, rendered);
+  return rendered;
+}
+
+/**
+ * Assign a track's stem to a rack position, conformed to the master grid.
+ * @param {import('./library/store.js').TrackRecord} record
+ * @param {import('./audio/jamRack.js').Role} role position AND stem role
+ */
+async function assignToRack(record, role) {
+  if (!rack || !engine || !transport) return false;
+  const stem = record.stems[role];
+  if (!stem) {
+    showToast(`“${record.title}” has no ${role} stem.`, { type: 'error' });
+    return false;
+  }
+  try {
+    rack.setAdjusting(role, true);
+    const bytes = await stem.blob.arrayBuffer();
+    const raw = await engine.ctx.decodeAudioData(bytes.slice(0));
+    rackSources[role] = { record, raw };
+    const conformed = await conform(record, role, raw);
+    rack.assignPosition(role, { trackId: record.id, title: record.title, buffer: conformed });
+    return true;
+  } catch (err) {
+    console.error(err);
+    showToast(`Couldn't conform “${record.title}” (${role}) to the grid.`, { type: 'error' });
+    return false;
+  } finally {
+    rack.setAdjusting(role, false);
+  }
+}
+
+/**
+ * Master grid changed (BPM or key): re-conform every assigned position and
+ * swap buffers in on the next loop boundary — the brief "adjusting" moment.
+ */
+async function reconformRack() {
+  if (!rack) return;
+  await Promise.all(
+    ROLES.map(async (role) => {
+      const src = rackSources[role];
+      if (!src || !rack) return;
+      rack.setAdjusting(role, true);
+      try {
+        const conformed = await conform(src.record, role, src.raw);
+        rack.queueBufferSwap(role, conformed);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        rack?.setAdjusting(role, false);
+      }
+    })
+  );
+}
+
+/** @param {string} key e.g. "D minor" */
+function setMasterKey(key) {
+  masterKey = key;
+  reconformRack();
+}
+
 /** Remove a track from the library (demo loops can't be removed). @param {string} trackId */
 async function removeTrack(trackId) {
   const record = library.find((r) => r.id === trackId);
@@ -426,6 +521,9 @@ async function doUnlock() {
   // Phase 2: the 4-position jam rack (console-driven until the rack UI phase).
   rack = new JamRack(engine.ctx, transport, engine.fxIn);
 
+  // Phase 4: BPM changes re-conform every assigned stem to the new grid.
+  transport.on('gridChanged', () => reconformRack());
+
   // Console access for grid/rack experiments until the rack UI lands:
   //   __raj.transport.setBpm(140)
   //   __raj.assignTrack('drums', '<trackId>')  — any library track into a role
@@ -437,16 +535,13 @@ async function doUnlock() {
     rack,
     ROLES,
     library: () => library.map((r) => ({ id: r.id, title: r.title })),
+    setMasterKey,
     assignTrack: async (/** @type {any} */ role, /** @type {string} */ trackId) => {
       const record = library.find((r) => r.id === trackId) ?? library[0];
-      if (!record || !engine || !rack || !transport) return 'no track';
-      const stem = record.stems[/** @type {any} */ (role)] ?? Object.values(record.stems)[0];
-      if (!stem) return `no stem for ${role}`;
-      const bytes = await stem.blob.arrayBuffer();
-      const buffer = await engine.ctx.decodeAudioData(bytes.slice(0));
-      rack.assignPosition(role, { trackId: record.id, title: record.title, buffer });
-      if (!transport.isPlaying) transport.start();
-      return `${record.title} → ${role}`;
+      if (!record || !transport) return 'no track';
+      const ok = await assignToRack(record, role);
+      if (ok && !transport.isPlaying) transport.start();
+      return ok ? `${record.title} → ${role} (conformed)` : 'failed';
     },
   };
 
