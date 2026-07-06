@@ -31,6 +31,7 @@ const GAIN_TC = 0.014; // time constant for volume/mute/solo ramps
  *   source: AudioBufferSourceNode | null,
  *   srcGain: GainNode | null,
  *   gain: GainNode,
+ *   eq: BiquadFilterNode | null,
  *   volume: number,
  *   muted: boolean,
  *   soloed: boolean,
@@ -56,7 +57,20 @@ export class JamRack {
     this.positions = /** @type {any} */ ({});
     for (const role of ROLES) {
       const gain = ctx.createGain();
-      gain.connect(this.bus);
+      // Per-position EQ "glue": a gentle highpass on non-bass roles cuts the
+      // low-mid mud that piles up when stems from different songs stack.
+      /** @type {BiquadFilterNode | null} */
+      let eq = null;
+      if (role !== 'bass') {
+        eq = ctx.createBiquadFilter();
+        eq.type = 'highpass';
+        eq.frequency.value = 120;
+        eq.Q.value = 0.7;
+        gain.connect(eq);
+        eq.connect(this.bus);
+      } else {
+        gain.connect(this.bus);
+      }
       this.positions[role] = {
         role,
         trackId: null,
@@ -66,6 +80,7 @@ export class JamRack {
         source: null,
         srcGain: null,
         gain,
+        eq,
         volume: 1,
         muted: false,
         soloed: false,
@@ -181,7 +196,10 @@ export class JamRack {
   dispose() {
     for (const unsub of this._unsubs) unsub();
     this._stopAll();
-    for (const role of ROLES) this.positions[role].gain.disconnect();
+    for (const role of ROLES) {
+      this.positions[role].gain.disconnect();
+      this.positions[role].eq?.disconnect();
+    }
     this.bus.disconnect();
   }
 
