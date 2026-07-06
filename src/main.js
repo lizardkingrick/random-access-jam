@@ -210,6 +210,11 @@ const intake = initIntake({
     page = Math.floor((library.length - 1) / SLOTS_PER_PAGE);
     refreshWheel();
   },
+  // Phase 6: pre-fill BPM/key in the assign dialog (lazy-loaded, best-effort).
+  analyze: async (file) => {
+    const { analyzeFile } = await import('./audio/analyze.js');
+    return analyzeFile(file);
+  },
 });
 
 function refreshWheel() {
