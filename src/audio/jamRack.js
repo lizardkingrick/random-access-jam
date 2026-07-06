@@ -32,6 +32,7 @@ const GAIN_TC = 0.014; // time constant for volume/mute/solo ramps
  *   srcGain: GainNode | null,
  *   gain: GainNode,
  *   eq: BiquadFilterNode | null,
+ *   meter: AnalyserNode,
  *   volume: number,
  *   muted: boolean,
  *   soloed: boolean,
@@ -71,6 +72,11 @@ export class JamRack {
       } else {
         gain.connect(this.bus);
       }
+      // Level-meter tap (post-gain, so mute/solo/volume show in the meter).
+      const meter = ctx.createAnalyser();
+      meter.fftSize = 512;
+      meter.smoothingTimeConstant = 0.4;
+      gain.connect(meter);
       this.positions[role] = {
         role,
         trackId: null,
@@ -81,6 +87,7 @@ export class JamRack {
         srcGain: null,
         gain,
         eq,
+        meter,
         volume: 1,
         muted: false,
         soloed: false,
@@ -175,6 +182,24 @@ export class JamRack {
   setAdjusting(role, adjusting) {
     this.positions[role].adjusting = adjusting;
     this.onPositionChanged?.(role);
+  }
+
+  /**
+   * Instantaneous peak level 0..1 for a position (for UI meters; call from
+   * the shared visual ticker only).
+   * @param {Role} role
+   */
+  getLevel(role) {
+    const pos = this.positions[role];
+    if (!pos.source) return 0;
+    if (!this._meterData) this._meterData = new Uint8Array(pos.meter.fftSize);
+    pos.meter.getByteTimeDomainData(this._meterData);
+    let peak = 0;
+    for (let i = 0; i < this._meterData.length; i++) {
+      const v = Math.abs(this._meterData[i] - 128);
+      if (v > peak) peak = v;
+    }
+    return Math.min(peak / 110, 1);
   }
 
   /** Snapshot for UI rendering. @param {Role} role */

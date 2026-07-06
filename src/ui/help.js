@@ -3,17 +3,22 @@
 
 const SHORTCUTS = [
   ['Space (hold)', 'Audio FX breakdown'],
-  ['← / →', 'Nudge the crossfader'],
+  ['1 / 2 / 3 / 4', 'Focus vocals, drums, bass, or lead'],
+  ['M / S', 'Mute / solo the focused position'],
+  ['↑ / ↓', 'Volume of the focused position'],
+  ['← / →', 'Nudge the master BPM'],
+  ['Arrows on the wheel', 'Browse tracks; Enter assigns to the focused position'],
+  ['Right-click / long-press a slot', 'Assign to a specific position, or remove'],
   ['Tab', 'Move between controls'],
-  ['↑ ↓ ← → on the wheel', 'Browse tracks, Enter queues one'],
-  ['← / → on a waveform', 'Seek ±5% (Home/End jump)'],
-  ['Right-click / long-press a slot', 'Load to a specific deck'],
   ['?', 'Open this help'],
 ];
 
 /**
  * @param {HTMLElement} root
- * @param {{ onClearLibrary?: () => void }} [opts]
+ * @param {{
+ *   onClearLibrary?: () => void,
+ *   onToggleMastering?: (enabled: boolean) => void,
+ * }} [opts]
  */
 export function createHelp(root, opts = {}) {
   const openBtn = document.createElement('button');
@@ -36,10 +41,10 @@ export function createHelp(root, opts = {}) {
   dialog.innerHTML = `
     <h2 class="help-dialog__title">How to jam</h2>
     <p class="help-dialog__intro">
-      Add tracks (or use the built-in demo loops), press play on a deck, then
-      slide the crossfader toward the other deck to blend. Picking a track on
-      the wheel queues it on the deck you're <em>not</em> hearing, so your mix
-      never cuts out.
+      The rack has four positions — vocals, drums, bass, lead — and they all
+      play <em>together</em>, locked to one master tempo and key. Point each
+      position at any track's matching stem (mix songs freely!), press play,
+      and shape the groove with mute/solo, volume, and the FX hold.
     </p>
     <h3 class="help-dialog__subtitle">Keyboard shortcuts</h3>
     <dl class="help-shortcuts">
@@ -50,6 +55,18 @@ export function createHelp(root, opts = {}) {
       Tracks are stored in this browser only — nothing is uploaded anywhere.
     </p>
   `;
+
+  // Mastering glue A/B toggle (compressor + limiter on the master bus).
+  const masteringRow = document.createElement('label');
+  masteringRow.className = 'help-dialog__option';
+  const masteringCheck = document.createElement('input');
+  masteringCheck.type = 'checkbox';
+  masteringCheck.checked = true;
+  masteringCheck.addEventListener('change', () => opts.onToggleMastering?.(masteringCheck.checked));
+  const masteringText = document.createElement('span');
+  masteringText.textContent = 'Mastering glue (compressor + limiter) — untick to A/B';
+  masteringRow.append(masteringCheck, masteringText);
+  dialog.append(masteringRow);
 
   const actions = document.createElement('div');
   actions.className = 'help-dialog__actions';
@@ -94,9 +111,9 @@ export function createHelp(root, opts = {}) {
       close();
       return;
     }
-    // Simple focus trap between the dialog's two buttons.
+    // Simple focus trap across the dialog's interactive elements.
     if (e.key === 'Tab') {
-      const focusables = [clearBtn, closeBtn];
+      const focusables = [masteringCheck, clearBtn, closeBtn];
       const idx = focusables.indexOf(/** @type {any} */ (document.activeElement));
       const next = e.shiftKey ? (idx <= 0 ? focusables.length - 1 : idx - 1) : (idx + 1) % focusables.length;
       focusables[next].focus();
