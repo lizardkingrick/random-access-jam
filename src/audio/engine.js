@@ -2,12 +2,11 @@
 /**
  * AudioContext owner and master graph.
  *
- *   DeckA source → deckA fade/mute gains ─┐
- *                                          ├→ crossfader gains → fx input → master → analyser → destination
- *   DeckB source → deckB fade/mute gains ─┘
+ *   jam rack (4 positions, summed) → fx input → master → analyser → destination
  *
  * The fx input node is a pass-through gain; the FX chain (fx.js) splices
- * itself between `fxIn` and `master`.
+ * itself between `fxIn` and `master`, and the mastering chain (mastering.js)
+ * splices between `master` and `analyser`.
  */
 
 export function createEngine() {
@@ -29,19 +28,11 @@ export function createEngine() {
   master.connect(analyser);
   analyser.connect(ctx.destination);
 
-  // Crossfader gains — one per deck, driven by crossfader.js.
-  const xfA = ctx.createGain();
-  const xfB = ctx.createGain();
-  xfA.connect(fxIn);
-  xfB.connect(fxIn);
-
   return {
     ctx,
     master,
     analyser,
     fxIn,
-    xfA,
-    xfB,
     get running() {
       return ctx.state === 'running';
     },

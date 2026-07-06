@@ -2,19 +2,19 @@
 /**
  * Bootstrap: mounts the HUD, starts the idle visualizer, unlocks the audio
  * engine on the first user gesture, and orchestrates the library ↔ wheel ↔
- * deck flows.
+ * jam-rack flows. The core model is a 4-position rack (vocals/drums/bass/
+ * lead) — every position plays together, conformed to one master BPM + key.
  */
 
 import './app.css';
 import { mountHud } from './ui/hud.js';
 import { showToast } from './ui/toasts.js';
 import { SLOTS_PER_PAGE } from './ui/wheel.js';
+import { createHelp } from './ui/help.js';
 import { createVisualizer } from './visualizer/visualizer.js';
 import { createBeatDetector } from './visualizer/beat.js';
 import { onTick, setSuspended } from './ticker.js';
 import { createEngine } from './audio/engine.js';
-import { Deck } from './audio/deck.js';
-import { createCrossfader } from './audio/crossfader.js';
 import { createFx } from './audio/fx.js';
 import { createMastering } from './audio/mastering.js';
 import { Transport, createMetronome } from './audio/transport.js';
@@ -22,7 +22,6 @@ import { JamRack, ROLES } from './audio/jamRack.js';
 import { DEMO_TRACKS, renderDemoStem, audioBufferToWavBlob } from './audio/demoLoops.js';
 import { getAllTracks, getTrack, putTrack, deleteTrack, clearLibrary } from './library/store.js';
 import { initIntake } from './library/intake.js';
-import { createHelp } from './ui/help.js';
 
 const app = /** @type {HTMLElement} */ (document.getElementById('app'));
 const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById('visualizer'));
@@ -30,24 +29,21 @@ const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById('visual
 const visualizer = createVisualizer(canvas);
 visualizer.start();
 
+// ---------- state ----------
+
 /** @type {import('./audio/engine.js').Engine | null} */
 let engine = null;
-/** @type {{ a: Deck, b: Deck } | null} */
-let decks = null;
-/** @type {ReturnType<typeof createCrossfader> | null} */
-let crossfader = null;
-/** @type {ReturnType<typeof createFx> | null} */
-let fx = null;
 /** @type {Transport | null} */
 let transport = null;
-/** @type {ReturnType<typeof createMetronome> | null} */
-let metronome = null;
 /** @type {JamRack | null} */
 let rack = null;
-/** Master musical key the whole rack conforms to. */
-let masterKey = 'A minor';
+/** @type {ReturnType<typeof createFx> | null} */
+let fx = null;
 /** @type {ReturnType<typeof createMastering> | null} */
 let mastering = null;
+
+/** Master musical key the whole rack conforms to. */
+let masterKey = 'A minor';
 /**
  * What each rack position is sourced from (for re-conforms on grid changes).
  * @type {Partial<Record<import('./audio/jamRack.js').Role, { record: import('./library/store.js').TrackRecord, raw: AudioBuffer }>>}
@@ -59,38 +55,63 @@ const conformCache = new Map();
 /** @type {import('./library/store.js').TrackRecord[]} */
 let library = [];
 let page = 0;
-
-/** @param {'a' | 'b'} id */
-const deck = (id) => (decks ? decks[id] : null);
-/** @param {'a' | 'b'} id */
-const card = (id) => (id === 'a' ? hud.deckA : hud.deckB);
+/** @type {import('./audio/jamRack.js').Role} */
+let focusedRole = 'vocals';
 
 // ---------- HUD ----------
 
 const hud = mountHud(app, {
-  onCrossfade: (x) => {
-    visualizer.setPalette(x);
-    updateActiveDecks(x);
-    crossfader?.set(x);
+  onFxHold: (held) => fx?.setHeld(held),
+  strip: {
+    onPlayStop: () => {
+      if (!transport) return;
+      if (transport.isPlaying) transport.stop();
+      else transport.start();
+      syncTransportUi();
+    },
+    onBpm: (bpm) => {
+      transport?.setBpm(bpm);
+    },
+    onKey: (key) => setMasterKey(key),
   },
-  onTempo: (rate) => {
-    // One global tempo control drives both decks (beginner-friendly).
-    deck('a')?.setRate(rate);
-    deck('b')?.setRate(rate);
-  },
-  onFxHold: (held) => {
-    fx?.setHeld(held);
-  },
-  deckA: deckCardHandlers('a'),
-  deckB: deckCardHandlers('b'),
+  rack: (role) => ({
+    onPick: (trackId) => {
+      if (!trackId) {
+        rack?.clearPosition(role);
+        delete rackSources[role];
+        return;
+      }
+      const record = library.find((r) => r.id === trackId);
+      if (record) assignToRack(record, role);
+    },
+    onMute: (muted) => {
+      rack?.mute(role, muted);
+      refreshRackCards();
+    },
+    onSolo: (soloed) => {
+      rack?.solo(role, soloed);
+      refreshRackCards();
+    },
+    onVolume: (volume) => rack?.setVolume(role, volume),
+    onFocusRequest: () => focusRole(role, { moveFocus: false }),
+  }),
   wheel: {
     onSelect: (slot) => {
-      // Queue onto the deck the listener is NOT hearing so beginners never
-      // cut off their own music.
-      const target = crossfader ? crossfader.inactiveDeck : 'b';
-      loadTrackToDeck(slot.id, target);
+      const record = library.find((r) => r.id === slot.id);
+      if (record) assignToRack(record, focusedRole);
     },
-    onLoadTo: (slot, deckId) => loadTrackToDeck(slot.id, deckId),
+    onLoadTo: (slot, role) => {
+      const record = library.find((r) => r.id === slot.id);
+      if (record) assignToRack(record, role);
+    },
+    loadTargets: (slot) => {
+      const record = library.find((r) => r.id === slot.id);
+      return ROLES.map((role) => ({
+        id: role,
+        label: `Assign to ${role}`,
+        disabled: !record?.stems[role],
+      }));
+    },
     onRemove: (slot) => removeTrack(slot.id),
     onPage: (delta) => {
       page += delta;
@@ -100,61 +121,56 @@ const hud = mountHud(app, {
   },
 });
 
-/** @param {'a' | 'b'} id */
-function deckCardHandlers(id) {
-  return {
-    onPlayPause: () => {
-      const d = deck(id);
-      if (!d || !d.buffer) return;
-      if (d.playing) d.pause();
-      else d.play();
-      card(id).setPlaying(d.playing);
-    },
-    onMute: () => {
-      const d = deck(id);
-      if (!d) return;
-      d.setMuted(!d.muted);
-      card(id).setMuted(d.muted);
-    },
-    onEject: () => {
-      const d = deck(id);
-      if (!d || !d.track) return;
-      d.eject();
-      card(id).setTrack(null);
-      card(id).setPlaying(false);
-    },
-    onSeek: (/** @type {number} */ fraction) => {
-      const d = deck(id);
-      if (!d || !d.buffer) return;
-      d.seekFraction(fraction);
-    },
-    onSeekBy: (/** @type {number} */ delta) => {
-      const d = deck(id);
-      if (!d || !d.buffer || !d.duration) return;
-      d.seekFraction(Math.min(Math.max(d.position / d.duration + delta, 0), 0.999));
-    },
-  };
+/**
+ * @param {import('./audio/jamRack.js').Role} role
+ * @param {{ moveFocus?: boolean }} [opts]
+ */
+function focusRole(role, opts = {}) {
+  focusedRole = role;
+  for (const r of ROLES) hud.rackCards[r].setFocused(r === role);
+  if (opts.moveFocus !== false) hud.rackCards[role].focus();
+}
+focusRole('vocals', { moveFocus: false });
+
+function refreshRackCards() {
+  if (!rack) return;
+  for (const role of ROLES) hud.rackCards[role].update(rack.getPosition(role));
 }
 
-/** @param {number} x crossfader position */
-function updateActiveDecks(x) {
-  hud.deckA.setActive(x <= 0.5);
-  hud.deckB.setActive(x >= 0.5);
+function refreshWheel() {
+  const pageCount = Math.max(1, Math.ceil(library.length / SLOTS_PER_PAGE));
+  page = Math.min(Math.max(page, 0), pageCount - 1);
+  const view = library.slice(page * SLOTS_PER_PAGE, (page + 1) * SLOTS_PER_PAGE);
+  hud.wheel.setSlots(view.map((r) => ({ id: r.id, title: r.title, color: r.color })));
+  hud.wheel.setPage(page, pageCount);
 }
-updateActiveDecks(0.5);
 
-// ---------- per-frame UI sync ----------
+function refreshPickers() {
+  if (!rack) return;
+  for (const role of ROLES) {
+    hud.rackCards[role].setTracks(
+      library.map((r) => ({ id: r.id, title: r.title, disabled: !r.stems[role] })),
+      rack.getPosition(role).trackId
+    );
+  }
+}
+
+function syncTransportUi() {
+  if (!transport) return;
+  hud.strip.setPlaying(transport.isPlaying);
+  hud.strip.setBpm(transport.bpm);
+}
+
+// ---------- per-frame UI sync (visuals only) ----------
 
 onTick((dt) => {
-  if (!decks) return;
-  for (const id of /** @type {const} */ (['a', 'b'])) {
-    const d = decks[id];
-    const c = card(id);
-    if (!d.buffer) continue;
-    c.setTime(d.position, d.duration);
-    c.waveform.setProgress(d.duration ? d.position / d.duration : 0);
-    c.waveform.render();
+  if (!rack || !transport) return;
+  let anyAdjusting = false;
+  for (const role of ROLES) {
+    hud.rackCards[role].setLevel(rack.getLevel(role));
+    if (rack.positions[role].adjusting) anyAdjusting = true;
   }
+  hud.strip.setStatus(anyAdjusting ? 'adjusting' : transport.isPlaying ? 'playing' : 'stopped');
   updateAudioLevels(dt);
 });
 
@@ -167,8 +183,8 @@ let wasAudible = false;
 
 /** @param {number} dt */
 function updateAudioLevels(dt) {
-  if (!engine || !decks) return;
-  const audible = decks.a.playing || decks.b.playing;
+  if (!engine || !transport) return;
+  const audible = transport.isPlaying;
   if (!audible) {
     if (wasAudible) {
       visualizer.setLevels({ low: 0, mid: 0, high: 0 });
@@ -186,9 +202,9 @@ function updateAudioLevels(dt) {
   const binHz = engine.ctx.sampleRate / analyser.fftSize;
   const band = (/** @type {number} */ from, /** @type {number} */ to) => {
     const i0 = Math.max(1, Math.floor(from / binHz));
-    const i1 = Math.min(freqData.length - 1, Math.ceil(to / binHz));
+    const i1 = Math.min(/** @type {Uint8Array} */ (freqData).length - 1, Math.ceil(to / binHz));
     let sum = 0;
-    for (let i = i0; i <= i1; i++) sum += freqData[i];
+    for (let i = i0; i <= i1; i++) sum += /** @type {Uint8Array} */ (freqData)[i];
     return sum / ((i1 - i0 + 1) * 255);
   };
 
@@ -209,21 +225,14 @@ const intake = initIntake({
     library.push(record);
     page = Math.floor((library.length - 1) / SLOTS_PER_PAGE);
     refreshWheel();
+    refreshPickers();
   },
-  // Phase 6: pre-fill BPM/key in the assign dialog (lazy-loaded, best-effort).
+  // Pre-fill BPM/key in the assign dialog (lazy-loaded, best-effort).
   analyze: async (file) => {
     const { analyzeFile } = await import('./audio/analyze.js');
     return analyzeFile(file);
   },
 });
-
-function refreshWheel() {
-  const pageCount = Math.max(1, Math.ceil(library.length / SLOTS_PER_PAGE));
-  page = Math.min(Math.max(page, 0), pageCount - 1);
-  const view = library.slice(page * SLOTS_PER_PAGE, (page + 1) * SLOTS_PER_PAGE);
-  hud.wheel.setSlots(view.map((r) => ({ id: r.id, title: r.title, color: r.color })));
-  hud.wheel.setPage(page, pageCount);
-}
 
 /** Render (or reuse cached) demo STEM SETS so the app is playable with no uploads. */
 async function ensureDemoTracks() {
@@ -251,85 +260,27 @@ async function ensureDemoTracks() {
   }
 }
 
-/**
- * Decode a record's stems. Returns a map of role → AudioBuffer.
- * @param {import('./library/store.js').TrackRecord} record
- */
-async function decodeStems(record) {
-  if (!engine) throw new Error('Audio engine is unavailable.');
-  const ctx = engine.ctx;
-  /** @type {Partial<Record<import('./library/store.js').StemRole, AudioBuffer>>} */
-  const buffers = {};
-  for (const [role, stem] of Object.entries(record.stems)) {
-    if (!stem) continue;
-    const bytes = await stem.blob.arrayBuffer();
-    buffers[/** @type {import('./library/store.js').StemRole} */ (role)] =
-      await ctx.decodeAudioData(bytes.slice(0));
-  }
-  return buffers;
-}
-
-/**
- * Interim (until the rack UI phase): mix a stem set down to one buffer so the
- * old two-deck UI can still play whole tracks.
- * @param {Partial<Record<string, AudioBuffer>>} buffers
- */
-function mixStems(buffers) {
-  if (!engine) throw new Error('Audio engine is unavailable.');
-  const parts = Object.values(buffers).filter(Boolean);
-  if (parts.length === 0) throw new Error('No stems to mix.');
-  if (parts.length === 1) return /** @type {AudioBuffer} */ (parts[0]);
-  const length = Math.max(...parts.map((b) => b.length));
-  const rate = parts[0].sampleRate;
-  const out = engine.ctx.createBuffer(2, length, rate);
-  for (let ch = 0; ch < 2; ch++) {
-    const dest = out.getChannelData(ch);
-    for (const part of parts) {
-      const src = part.getChannelData(Math.min(ch, part.numberOfChannels - 1));
-      for (let i = 0; i < src.length; i++) dest[i] += src[i];
-    }
-  }
-  return out;
-}
-
-/**
- * Decode a library track and load it onto a deck. If that deck was playing,
- * the new track keeps playing; otherwise it loads paused.
- * @param {string} trackId
- * @param {'a' | 'b'} deckId
- * @param {{ autoplay?: boolean }} [opts]
- */
-async function loadTrackToDeck(trackId, deckId, opts = {}) {
-  const d = deck(deckId);
-  if (!d || !engine) return;
-  const record = library.find((r) => r.id === trackId) ?? (await getTrack(trackId));
-  if (!record) {
-    showToast('That track is no longer in the library.', { type: 'error' });
+/** Remove a track from the library (demo loops can't be removed). @param {string} trackId */
+async function removeTrack(trackId) {
+  const record = library.find((r) => r.id === trackId);
+  if (!record) return;
+  if (record.demo) {
+    showToast('The demo loops are built in — they stay on the wheel.');
     return;
   }
   try {
-    const buffer = mixStems(await decodeStems(record));
-    const autoplay = opts.autoplay ?? d.playing;
-    d.load(buffer, { id: record.id, title: record.title, artist: record.artist }, {
-      loop: record.demo,
-      autoplay,
-    });
-    d.setRate(hud.tempo.rate);
-    const c = card(deckId);
-    c.setTrack({ title: record.title, artist: record.artist });
-    c.waveform.setBuffer(buffer);
-    c.setPlaying(d.playing);
-    c.setMuted(d.muted);
-    c.setTime(d.position, d.duration);
-    hud.wheel.setSelected(record.id);
-    showToast(`“${record.title}” → Deck ${deckId.toUpperCase()}${autoplay ? '' : ' — press play when ready'}.`);
+    await deleteTrack(trackId);
+    library = library.filter((r) => r.id !== trackId);
+    refreshWheel();
+    refreshPickers();
+    showToast(`Removed “${record.title}” from the library.`, { type: 'success' });
   } catch (err) {
     console.error(err);
-    showToast(`Couldn't load “${record.title}” — try re-adding the file.`, { type: 'error' });
+    showToast('Could not remove that track — try again.', { type: 'error' });
   }
 }
 
-// ---------- conform-to-grid pipeline (rack) ----------
+// ---------- conform-to-grid pipeline ----------
 
 /**
  * Conform one raw stem to the current master grid (BPM + key), cached.
@@ -377,6 +328,13 @@ async function assignToRack(record, role) {
     rackSources[role] = { record, raw };
     const conformed = await conform(record, role, raw);
     rack.assignPosition(role, { trackId: record.id, title: record.title, buffer: conformed });
+    hud.wheel.setSelected(record.id);
+    // First assignment starts the groove so beginners hear something instantly.
+    if (!transport.isPlaying) {
+      transport.start();
+      syncTransportUi();
+    }
+    showToast(`“${record.title}” → ${role}.`);
     return true;
   } catch (err) {
     console.error(err);
@@ -413,26 +371,8 @@ async function reconformRack() {
 /** @param {string} key e.g. "D minor" */
 function setMasterKey(key) {
   masterKey = key;
+  hud.strip.setKey(key);
   reconformRack();
-}
-
-/** Remove a track from the library (demo loops can't be removed). @param {string} trackId */
-async function removeTrack(trackId) {
-  const record = library.find((r) => r.id === trackId);
-  if (!record) return;
-  if (record.demo) {
-    showToast('The demo loops are built in — they stay on the wheel.');
-    return;
-  }
-  try {
-    await deleteTrack(trackId);
-    library = library.filter((r) => r.id !== trackId);
-    refreshWheel();
-    showToast(`Removed “${record.title}” from the library.`, { type: 'success' });
-  } catch (err) {
-    console.error(err);
-    showToast('Could not remove that track — try again.', { type: 'error' });
-  }
 }
 
 // ---------- help overlay ----------
@@ -444,40 +384,15 @@ createHelp(app, {
       library = library.filter((r) => r.demo);
       page = 0;
       refreshWheel();
+      refreshPickers();
       showToast('Library cleared — demo loops kept.', { type: 'success' });
     } catch (err) {
       console.error(err);
       showToast('Could not clear the library — try again.', { type: 'error' });
     }
   },
+  onToggleMastering: (enabled) => mastering?.setEnabled(enabled),
 });
-
-/**
- * TEMPORARY (Phase 1): a metronome toggle in the top-left cluster so the
- * transport grid is audible. Removed when the jam rack lands.
- */
-function mountMetronomeButton() {
-  const top = hud.hud.querySelector('.hud-top');
-  if (!top || !transport || !metronome) return;
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'fx-btn metro-btn';
-  btn.setAttribute('aria-pressed', 'false');
-  const render = () => {
-    btn.innerHTML = `Metronome<small>${metronome?.enabled ? `on — ${transport?.bpm} BPM` : 'temp · Phase 1'}</small>`;
-  };
-  render();
-  btn.addEventListener('click', () => {
-    if (!metronome || !transport) return;
-    const on = metronome.toggle();
-    if (!on && transport.isPlaying) transport.stop();
-    btn.classList.toggle('is-held', on);
-    btn.setAttribute('aria-pressed', String(on));
-    render();
-  });
-  transport.on('gridChanged', render);
-  top.append(btn);
-}
 
 // ---------- audio unlock ----------
 
@@ -486,7 +401,7 @@ overlay.className = 'unlock-overlay';
 overlay.innerHTML = `
   <button type="button" class="unlock-overlay__btn">
     <span class="unlock-overlay__title">Random <em>Access</em> Jam</span>
-    <span class="unlock-overlay__hint">Tap anywhere to power up the decks</span>
+    <span class="unlock-overlay__hint">Tap anywhere to power up the rack</span>
   </button>`;
 document.body.append(overlay);
 
@@ -498,7 +413,8 @@ function unlock() {
     unlockPromise = doUnlock().catch((err) => {
       unlockPromise = null;
       engine = null;
-      decks = null;
+      rack = null;
+      transport = null;
       console.error(err);
       showToast(err instanceof Error ? err.message : 'Audio could not start.', { type: 'error' });
       throw err;
@@ -511,53 +427,31 @@ async function doUnlock() {
   engine = createEngine();
   await engine.resume();
 
-  decks = {
-    a: new Deck(engine.ctx, engine.xfA, 'a'),
-    b: new Deck(engine.ctx, engine.xfB, 'b'),
-  };
-  for (const id of /** @type {const} */ (['a', 'b'])) {
-    decks[id].onEnded = () => card(id).setPlaying(false);
-  }
+  transport = new Transport(engine.ctx);
+  rack = new JamRack(engine.ctx, transport, engine.fxIn);
   fx = createFx(engine);
-  crossfader = createCrossfader(engine);
-  crossfader.set(hud.crossfader.value);
-
-  // Phase 5: glue compressor + limiter after the FX chain (A/B via
-  // __raj.mastering.setEnabled(false) until the rack UI toggle lands).
   mastering = createMastering(engine);
 
-  // Phase 1: master transport clock + temporary metronome proof.
-  transport = new Transport(engine.ctx);
-  metronome = createMetronome(engine.ctx, transport, engine.master);
-  mountMetronomeButton();
+  rack.onPositionChanged = () => {
+    refreshRackCards();
+    refreshPickers();
+  };
+  transport.on('gridChanged', () => {
+    syncTransportUi();
+    reconformRack();
+  });
+  transport.on('stop', () => syncTransportUi());
 
-  // Phase 2: the 4-position jam rack (console-driven until the rack UI phase).
-  rack = new JamRack(engine.ctx, transport, engine.fxIn);
-
-  // Phase 4: BPM changes re-conform every assigned stem to the new grid.
-  transport.on('gridChanged', () => reconformRack());
-
-  // Console access for grid/rack experiments until the rack UI lands:
-  //   __raj.transport.setBpm(140)
-  //   __raj.assignTrack('drums', '<trackId>')  — any library track into a role
-  //   __raj.rack.solo('drums', true)
+  // Debug/console access (also hosts the Phase 1 metronome proof).
   /** @type {any} */ (window).__raj = {
     transport,
-    metronome,
-    engine,
     rack,
+    engine,
+    ROLES,
+    setMasterKey,
+    metronome: createMetronome(engine.ctx, transport, engine.master),
     get mastering() {
       return mastering;
-    },
-    ROLES,
-    library: () => library.map((r) => ({ id: r.id, title: r.title })),
-    setMasterKey,
-    assignTrack: async (/** @type {any} */ role, /** @type {string} */ trackId) => {
-      const record = library.find((r) => r.id === trackId) ?? library[0];
-      if (!record || !transport) return 'no track';
-      const ok = await assignToRack(record, role);
-      if (ok && !transport.isPlaying) transport.start();
-      return ok ? `${record.title} → ${role} (conformed)` : 'failed';
     },
   };
 
@@ -567,11 +461,24 @@ async function doUnlock() {
   await ensureDemoTracks();
   library = await getAllTracks();
   refreshWheel();
+  refreshPickers();
+  refreshRackCards();
+  hud.strip.setKey(masterKey);
+  syncTransportUi();
 
-  // Auto-load the first two tracks (the demos on first run) onto the decks.
-  if (library[0]) await loadTrackToDeck(library[0].id, 'a', { autoplay: false });
-  if (library[1]) await loadTrackToDeck(library[1].id, 'b', { autoplay: false });
-  showToast('Decks loaded — press play, then ride the crossfader.', { type: 'success' });
+  // First-run magic: a cross-track mashup — Neon Causeway's drums + bass
+  // under Midnight Reactor's lead — so the core idea is audible immediately.
+  const neon = library.find((r) => r.id === 'demo-neon-causeway');
+  const midnight = library.find((r) => r.id === 'demo-midnight-reactor');
+  if (neon && midnight && ROLES.every((r) => !rack?.getPosition(r).trackId)) {
+    await assignToRack(neon, 'drums');
+    await assignToRack(neon, 'bass');
+    await assignToRack(midnight, 'lead');
+    showToast('Demo mashup loaded — two songs, one groove. Press ▶ to start/stop.', {
+      type: 'success',
+      duration: 6000,
+    });
+  }
 }
 
 overlay.addEventListener('pointerdown', () => unlock().catch(() => {}));
@@ -582,19 +489,58 @@ overlay.addEventListener('keydown', (e) => {
 // ---------- global keys + tab visibility ----------
 
 document.addEventListener('keydown', (e) => {
-  if (e.defaultPrevented) return; // a control (waveform, wheel, …) already handled it
+  if (e.defaultPrevented) return; // a control already handled it
   const target = /** @type {HTMLElement} */ (e.target);
-  if (target.closest('input, textarea, [contenteditable]')) return;
-  if (e.key === 'ArrowLeft') {
-    hud.crossfader.nudge(-0.05);
+  if (target.closest('input, textarea, select, [contenteditable]')) return;
+
+  const roleByDigit = { 1: 'vocals', 2: 'drums', 3: 'bass', 4: 'lead' };
+  if (e.key in roleByDigit) {
+    focusRole(/** @type {any} */ (roleByDigit[/** @type {'1'} */ (e.key)]));
     e.preventDefault();
-  } else if (e.key === 'ArrowRight') {
-    hud.crossfader.nudge(0.05);
-    e.preventDefault();
-  } else if (e.key === ' ' && !e.repeat && !target.closest('button, [role="option"], [role="button"]')) {
-    // Space anywhere (except on a focused control that handles it) = FX hold.
-    hud.fx.setHeld(true);
-    e.preventDefault();
+    return;
+  }
+
+  switch (e.key) {
+    case 'm':
+    case 'M': {
+      if (!rack) return;
+      rack.mute(focusedRole, !rack.getPosition(focusedRole).muted);
+      refreshRackCards();
+      e.preventDefault();
+      break;
+    }
+    case 's':
+    case 'S': {
+      if (!rack) return;
+      rack.solo(focusedRole, !rack.getPosition(focusedRole).soloed);
+      refreshRackCards();
+      e.preventDefault();
+      break;
+    }
+    case 'ArrowUp':
+    case 'ArrowDown': {
+      if (!rack) return;
+      const pos = rack.getPosition(focusedRole);
+      const next = pos.volume + (e.key === 'ArrowUp' ? 0.05 : -0.05);
+      rack.setVolume(focusedRole, next);
+      refreshRackCards();
+      e.preventDefault();
+      break;
+    }
+    case 'ArrowLeft':
+    case 'ArrowRight': {
+      if (!transport) return;
+      transport.setBpm(transport.bpm + (e.key === 'ArrowRight' ? 1 : -1));
+      syncTransportUi();
+      e.preventDefault();
+      break;
+    }
+    case ' ': {
+      if (e.repeat || target.closest('button, [role="option"], [role="button"]')) return;
+      hud.fx.setHeld(true);
+      e.preventDefault();
+      break;
+    }
   }
 });
 
@@ -603,9 +549,8 @@ document.addEventListener('keyup', (e) => {
 });
 
 document.addEventListener('visibilitychange', () => {
-  const anyPlaying = Boolean(decks && (decks.a.playing || decks.b.playing));
   // Suspend all animation when the tab is hidden and nothing is playing.
-  setSuspended(document.hidden && !anyPlaying);
+  setSuspended(document.hidden && !transport?.isPlaying);
 });
 
 // ---------- PWA service worker (no-op in dev) ----------

@@ -59,7 +59,8 @@ function truncate(title) {
  * @param {HTMLElement} container
  * @param {{
  *   onSelect?: (slot: WheelSlotData, index: number) => void,
- *   onLoadTo?: (slot: WheelSlotData, deckId: 'a' | 'b') => void,
+ *   onLoadTo?: (slot: WheelSlotData, role: 'vocals' | 'drums' | 'bass' | 'lead') => void,
+ *   loadTargets?: (slot: WheelSlotData) => { id: 'vocals' | 'drums' | 'bass' | 'lead', label: string, disabled?: boolean }[],
  *   onRemove?: (slot: WheelSlotData) => void,
  *   onPage?: (delta: number) => void,
  *   onAddTracks?: () => void,
@@ -82,7 +83,7 @@ export function createWheel(container, opts = {}) {
     class: 'wheel-svg',
     viewBox: `0 0 ${SIZE} ${SIZE}`,
     role: 'listbox',
-    'aria-label': 'Track wheel — pick a track to queue it on the next deck',
+    'aria-label': 'Track browser — pick a track to assign it to the focused rack position',
   });
   wrap.append(svg);
 
@@ -190,7 +191,13 @@ export function createWheel(container, opts = {}) {
   function requestLoadMenu(i, x, y) {
     const slot = slots[i];
     if (!slot || !opts.onLoadTo) return;
-    openLoadMenu(slot, x, y, opts.onLoadTo, opts.onRemove);
+    const targets = opts.loadTargets?.(slot) ?? [
+      { id: /** @type {const} */ ('vocals'), label: 'Assign to vocals' },
+      { id: /** @type {const} */ ('drums'), label: 'Assign to drums' },
+      { id: /** @type {const} */ ('bass'), label: 'Assign to bass' },
+      { id: /** @type {const} */ ('lead'), label: 'Assign to lead' },
+    ];
+    openLoadMenu(slot, x, y, targets, opts.onLoadTo, opts.onRemove);
   }
 
   /** @param {KeyboardEvent} e @param {number} i */
@@ -218,7 +225,7 @@ export function createWheel(container, opts = {}) {
         label.textContent = truncate(slot.title);
         chip.setAttribute('fill', slot.color ?? 'rgba(53, 201, 255, 0.8)');
         g.setAttribute('aria-selected', String(slot.id === selectedId));
-        g.setAttribute('aria-label', `${slot.title}. Press Enter to queue on the next deck.`);
+        g.setAttribute('aria-label', `${slot.title}. Press Enter to assign to the focused position.`);
         g.removeAttribute('aria-disabled');
       } else {
         g.classList.add('wheel-slot--empty');
@@ -261,28 +268,30 @@ export function createWheel(container, opts = {}) {
 }
 
 /**
- * Minimal context menu offering explicit "load to deck" choices.
+ * Minimal context menu offering explicit "assign to position" choices.
  * @param {WheelSlotData} slot
  * @param {number} x @param {number} y
- * @param {(slot: WheelSlotData, deckId: 'a' | 'b') => void} onLoadTo
+ * @param {{ id: any, label: string, disabled?: boolean }[]} targets
+ * @param {(slot: WheelSlotData, target: any) => void} onLoadTo
  * @param {((slot: WheelSlotData) => void) | undefined} onRemove
  */
-function openLoadMenu(slot, x, y, onLoadTo, onRemove) {
+function openLoadMenu(slot, x, y, targets, onLoadTo, onRemove) {
   document.querySelector('.wheel-menu')?.remove();
   const menu = document.createElement('div');
   menu.className = 'wheel-menu panel';
   menu.setAttribute('role', 'menu');
-  menu.setAttribute('aria-label', `Load ${slot.title}`);
+  menu.setAttribute('aria-label', `Assign ${slot.title}`);
 
-  for (const deckId of /** @type {const} */ (['a', 'b'])) {
+  for (const target of targets) {
     const item = document.createElement('button');
     item.type = 'button';
     item.className = 'wheel-menu__item';
     item.setAttribute('role', 'menuitem');
-    item.textContent = `Load to Deck ${deckId.toUpperCase()}`;
+    item.textContent = target.label;
+    item.disabled = Boolean(target.disabled);
     item.addEventListener('click', () => {
       close();
-      onLoadTo(slot, deckId);
+      onLoadTo(slot, target.id);
     });
     menu.append(item);
   }
