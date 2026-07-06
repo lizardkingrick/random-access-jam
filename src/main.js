@@ -16,6 +16,7 @@ import { createEngine } from './audio/engine.js';
 import { Deck } from './audio/deck.js';
 import { createCrossfader } from './audio/crossfader.js';
 import { createFx } from './audio/fx.js';
+import { createMastering } from './audio/mastering.js';
 import { Transport, createMetronome } from './audio/transport.js';
 import { JamRack, ROLES } from './audio/jamRack.js';
 import { DEMO_TRACKS, renderDemoStem, audioBufferToWavBlob } from './audio/demoLoops.js';
@@ -45,6 +46,8 @@ let metronome = null;
 let rack = null;
 /** Master musical key the whole rack conforms to. */
 let masterKey = 'A minor';
+/** @type {ReturnType<typeof createMastering> | null} */
+let mastering = null;
 /**
  * What each rack position is sourced from (for re-conforms on grid changes).
  * @type {Partial<Record<import('./audio/jamRack.js').Role, { record: import('./library/store.js').TrackRecord, raw: AudioBuffer }>>}
@@ -514,6 +517,10 @@ async function doUnlock() {
   crossfader = createCrossfader(engine);
   crossfader.set(hud.crossfader.value);
 
+  // Phase 5: glue compressor + limiter after the FX chain (A/B via
+  // __raj.mastering.setEnabled(false) until the rack UI toggle lands).
+  mastering = createMastering(engine);
+
   // Phase 1: master transport clock + temporary metronome proof.
   transport = new Transport(engine.ctx);
   metronome = createMetronome(engine.ctx, transport, engine.master);
@@ -534,6 +541,9 @@ async function doUnlock() {
     metronome,
     engine,
     rack,
+    get mastering() {
+      return mastering;
+    },
     ROLES,
     library: () => library.map((r) => ({ id: r.id, title: r.title })),
     setMasterKey,
