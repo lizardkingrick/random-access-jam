@@ -1,0 +1,356 @@
+{
+  "Alive": {
+    "code": "H15",
+    "album": "homework",
+    "key": "Bbm",
+    "bpm": 129,
+    "stems": {
+      "all": "Stems/Alive/Alive - All (Bbm 129).wav",
+      "lead": "Stems/Alive/Alive - Lead (Bbm 129).wav"
+    },
+    "oggs": {
+      "all": "stems-ogg/Alive/Alive - All (Bbm 129).ogg",
+      "lead": "stems-ogg/Alive/Alive - Lead (Bbm 129).ogg"
+    }
+  },
+  "Around The World": {
+    "code": "H7",
+    "album": "homework",
+    "key": "Em",
+    "bpm": 121,
+    "stems": {
+      "groove": "Stems/Around The World/Around The World - Groove (Em 121).wav",
+      "lead": "Stems/Around The World/Around The World - Lead (Em 121).wav"
+    },
+    "oggs": {
+      "groove": "stems-ogg/Around The World/Around The World - Groove (Em 121).ogg",
+      "lead": "stems-ogg/Around The World/Around The World - Lead (Em 121).ogg"
+    }
+  },
+  "Contact": {
+    "code": "R13",
+    "album": "ram",
+    "key": "Bm",
+    "bpm": 124,
+    "stems": {
+      "groove": "Stems/Contact/Contact - Groove (Bm 124).wav",
+      "texture": "Stems/Contact/Contact - Texture (Bm 124).wav"
+    },
+    "oggs": {
+      "groove": "stems-ogg/Contact/Contact - Groove (Bm 124).ogg",
+      "texture": "stems-ogg/Contact/Contact - Texture (Bm 124).ogg"
+    }
+  },
+  "Da Funk": {
+    "code": "H4",
+    "album": "homework",
+    "key": "Gm",
+    "bpm": 111,
+    "stems": {
+      "groove": "Stems/Da Funk/Da Funk - Groove (Gm 111).wav",
+      "lead": "Stems/Da Funk/Da Funk - Lead (Gm 111).wav"
+    },
+    "oggs": {
+      "groove": "stems-ogg/Da Funk/Da Funk - Groove (Gm 111).ogg",
+      "lead": "stems-ogg/Da Funk/Da Funk - Lead (Gm 111).ogg"
+    }
+  },
+  "Digital Love": {
+    "code": "D3",
+    "album": "discovery",
+    "key": "A",
+    "bpm": 125,
+    "stems": {
+      "groove": "Stems/Digital Love/Digital Love - Groove (A 125).wav"
+    },
+    "oggs": {
+      "groove": "stems-ogg/Digital Love/Digital Love - Groove (A 125).ogg"
+    }
+  },
+  "Doin' It Right": {
+    "code": "R12",
+    "album": "ram",
+    "key": "Ebm",
+    "bpm": 89,
+    "stems": {
+      "groove": "Stems/Doin' It Right/Doin' It Right - Groove (Ebm 89).wav",
+      "lead": "Stems/Doin' It Right/Doin' It Right - Lead (Ebm 89).wav",
+      "texture": "Stems/Doin' It Right/Doin' It Right - Texture (Ebm 89).wav"
+    },
+    "oggs": {
+      "groove": "stems-ogg/Doin' It Right/Doin' It Right - Groove (Ebm 89).ogg",
+      "lead": "stems-ogg/Doin' It Right/Doin' It Right - Lead (Ebm 89).ogg",
+      "texture": "stems-ogg/Doin' It Right/Doin' It Right - Texture (Ebm 89).ogg"
+    }
+  },
+  "Get Lucky": {
+    "code": "R8",
+    "album": "ram",
+    "key": "Gbm",
+    "bpm": 116,
+    "stems": {
+      "groove": "Stems/Get Lucky/Get Lucky - Groove (Gbm 116).wav",
+      "lead": "Stems/Get Lucky/Get Lucky - Lead (Gbm 116).wav",
+      "texture": "Stems/Get Lucky/Get Lucky - Texture (Gbm 116).wav"
+    },
+    "oggs": {
+      "groove": "stems-ogg/Get Lucky/Get Lucky - Groove (Gbm 116).ogg",
+      "lead": "stems-ogg/Get Lucky/Get Lucky - Lead (Gbm 116).ogg",
+      "texture": "stems-ogg/Get Lucky/Get Lucky - Texture (Gbm 116).ogg"
+    }
+  },
+  "Giorgio By Moroder": {
+    "code": "R3",
+    "album": "ram",
+    "key": "Am",
+    "bpm": 113,
+    "stems": {
+      "groove": "Stems/Giorgio By Moroder/Giorgio By Moroder - Groove (Am 113).wav",
+      "lead": "Stems/Giorgio By Moroder/Giorgio By Moroder - Lead (Am 113).wav",
+      "texture": "Stems/Giorgio By Moroder/Giorgio By Moroder - Texture (Am 113).wav"
+    },
+    "oggs": {
+      "groove": "stems-ogg/Giorgio By Moroder/Giorgio By Moroder - Groove (Am 113).ogg",
+      "lead": "stems-ogg/Giorgio By Moroder/Giorgio By Moroder - Lead (Am 113).ogg",
+      "texture": "stems-ogg/Giorgio By Moroder/Giorgio By Moroder - Texture (Am 113).ogg"
+    }
+  },
+  "Give Life Back To Music": {
+    "code": "R1",
+    "album": "ram",
+    "key": "Am",
+    "bpm": 119,
+    "stems": {
+      "groove": "Stems/Give Life Back To Music/Give Life Back To Music - Groove (Am 119).wav",
+      "lead": "Stems/Give Life Back To Music/Give Life Back To Music - Lead (Am 119).wav",
+      "texture": "Stems/Give Life Back To Music/Give Life Back To Music - Texture (Am 119).wav"
+    },
+    "oggs": {
+      "groove": "stems-ogg/Give Life Back To Music/Give Life Back To Music - Groove (Am 119).ogg",
+      "lead": "stems-ogg/Give Life Back To Music/Give Life Back To Music - Lead (Am 119).ogg",
+      "texture": "stems-ogg/Give Life Back To Music/Give Life Back To Music - Texture (Am 119).ogg"
+    }
+  },
+  "Harder Better Faster Stronger": {
+    "code": "D4",
+    "album": "discovery",
+    "key": "Gbm",
+    "bpm": 123,
+    "stems": {
+      "groove": "Stems/Harder Better Faster Stronger/Harder Better Faster Stronger - Groove (Gbm 123).wav",
+      "lead": "Stems/Harder Better Faster Stronger/Harder Better Faster Stronger - Lead (Gbm 123).wav"
+    },
+    "oggs": {
+      "groove": "stems-ogg/Harder Better Faster Stronger/Harder Better Faster Stronger - Groove (Gbm 123).ogg",
+      "lead": "stems-ogg/Harder Better Faster Stronger/Harder Better Faster Stronger - Lead (Gbm 123).ogg"
+    }
+  },
+  "Harder Better Faster Stronger (Alive 2007)": {
+    "code": "A5",
+    "album": "alive",
+    "key": "Fm",
+    "bpm": 123,
+    "stems": {
+      "lead": "Stems/Harder Better Faster Stronger (Alive 2007)/Harder Better Faster Stronger (Alive 2007) - Lead (Fm 123).wav"
+    },
+    "oggs": {
+      "lead": "stems-ogg/Harder Better Faster Stronger (Alive 2007)/Harder Better Faster Stronger (Alive 2007) - Lead (Fm 123).ogg"
+    }
+  },
+  "Human After All": {
+    "code": "U1",
+    "album": "haa",
+    "key": "Bm",
+    "bpm": 136,
+    "stems": {
+      "groove": "Stems/Human After All/Human After All - Groove (Bm 136).wav",
+      "lead": "Stems/Human After All/Human After All - Lead (Bm 136).wav"
+    },
+    "oggs": {
+      "groove": "stems-ogg/Human After All/Human After All - Groove (Bm 136).ogg",
+      "lead": "stems-ogg/Human After All/Human After All - Lead (Bm 136).ogg"
+    }
+  },
+  "I Feel It Coming": {
+    "code": "S18",
+    "album": "weeknd",
+    "key": "Cm",
+    "bpm": 93,
+    "stems": {
+      "groove": "Stems/I Feel It Coming/I Feel It Coming - Groove (Cm 93).wav",
+      "lead": "Stems/I Feel It Coming/I Feel It Coming - Lead (Cm 93).wav",
+      "texture": "Stems/I Feel It Coming/I Feel It Coming - Texture (Cm 93).wav"
+    },
+    "oggs": {
+      "groove": "stems-ogg/I Feel It Coming/I Feel It Coming - Groove (Cm 93).ogg",
+      "lead": "stems-ogg/I Feel It Coming/I Feel It Coming - Lead (Cm 93).ogg",
+      "texture": "stems-ogg/I Feel It Coming/I Feel It Coming - Texture (Cm 93).ogg"
+    }
+  },
+  "Infinity Repeating": {
+    "code": "R15",
+    "album": "ram",
+    "key": "Bbm",
+    "bpm": 110,
+    "stems": {
+      "groove": "Stems/Infinity Repeating/Infinity Repeating - Groove (Bbm 110).wav",
+      "lead": "Stems/Infinity Repeating/Infinity Repeating - Lead (Bbm 110).wav",
+      "texture": "Stems/Infinity Repeating/Infinity Repeating - Texture (Bbm 110).wav"
+    },
+    "oggs": {
+      "groove": "stems-ogg/Infinity Repeating/Infinity Repeating - Groove (Bbm 110).ogg",
+      "lead": "stems-ogg/Infinity Repeating/Infinity Repeating - Lead (Bbm 110).ogg",
+      "texture": "stems-ogg/Infinity Repeating/Infinity Repeating - Texture (Bbm 110).ogg"
+    }
+  },
+  "Instant Crush": {
+    "code": "R5",
+    "album": "ram",
+    "key": "Bbm",
+    "bpm": 110,
+    "stems": {
+      "groove": "Stems/Instant Crush/Instant Crush - Groove (Bbm 110).wav",
+      "lead": "Stems/Instant Crush/Instant Crush - Lead (Bbm 110).wav",
+      "texture": "Stems/Instant Crush/Instant Crush - Texture (Bbm 110).wav"
+    },
+    "oggs": {
+      "groove": "stems-ogg/Instant Crush/Instant Crush - Groove (Bbm 110).ogg",
+      "lead": "stems-ogg/Instant Crush/Instant Crush - Lead (Bbm 110).ogg",
+      "texture": "stems-ogg/Instant Crush/Instant Crush - Texture (Bbm 110).ogg"
+    }
+  },
+  "Lose Yourself To Dance": {
+    "code": "R6",
+    "album": "ram",
+    "key": "Bbm",
+    "bpm": 100,
+    "stems": {
+      "groove": "Stems/Lose Yourself To Dance/Lose Yourself To Dance - Groove (Bbm 100).wav",
+      "lead": "Stems/Lose Yourself To Dance/Lose Yourself To Dance - Lead (Bbm 100).wav",
+      "texture": "Stems/Lose Yourself To Dance/Lose Yourself To Dance - Texture (Bbm 100).wav"
+    },
+    "oggs": {
+      "groove": "stems-ogg/Lose Yourself To Dance/Lose Yourself To Dance - Groove (Bbm 100).ogg",
+      "lead": "stems-ogg/Lose Yourself To Dance/Lose Yourself To Dance - Lead (Bbm 100).ogg",
+      "texture": "stems-ogg/Lose Yourself To Dance/Lose Yourself To Dance - Texture (Bbm 100).ogg"
+    }
+  },
+  "One More Time": {
+    "code": "D1",
+    "album": "discovery",
+    "key": "Bm",
+    "bpm": 123,
+    "stems": {
+      "groove": "Stems/One More Time/One More Time - Groove (Bm 123).wav",
+      "lead": "Stems/One More Time/One More Time - Lead (Bm 123).wav",
+      "texture": "Stems/One More Time/One More Time - Texture (Bm 123).wav"
+    },
+    "oggs": {
+      "groove": "stems-ogg/One More Time/One More Time - Groove (Bm 123).ogg",
+      "lead": "stems-ogg/One More Time/One More Time - Lead (Bm 123).ogg",
+      "texture": "stems-ogg/One More Time/One More Time - Texture (Bm 123).ogg"
+    }
+  },
+  "Robot Rock": {
+    "code": "U3",
+    "album": "haa",
+    "key": "Dm",
+    "bpm": 112,
+    "stems": {
+      "groove": "Stems/Robot Rock/Robot Rock - Groove (Dm 112).wav",
+      "texture": "Stems/Robot Rock/Robot Rock - Texture (Dm 112).wav"
+    },
+    "oggs": {
+      "groove": "stems-ogg/Robot Rock/Robot Rock - Groove (Dm 112).ogg",
+      "texture": "stems-ogg/Robot Rock/Robot Rock - Texture (Dm 112).ogg"
+    }
+  },
+  "Something About Us": {
+    "code": "D9",
+    "album": "discovery",
+    "key": "Dm",
+    "bpm": 100,
+    "stems": {
+      "groove": "Stems/Something About Us/Something About Us - Groove (Dm 100).wav",
+      "lead": "Stems/Something About Us/Something About Us - Lead (Dm 100).wav",
+      "texture": "Stems/Something About Us/Something About Us - Texture (Dm 100).wav"
+    },
+    "oggs": {
+      "groove": "stems-ogg/Something About Us/Something About Us - Groove (Dm 100).ogg",
+      "lead": "stems-ogg/Something About Us/Something About Us - Lead (Dm 100).ogg",
+      "texture": "stems-ogg/Something About Us/Something About Us - Texture (Dm 100).ogg"
+    }
+  },
+  "Starboy": {
+    "code": "S1",
+    "album": "weeknd",
+    "key": "Am",
+    "bpm": 93,
+    "stems": {
+      "groove": "Stems/Starboy/Starboy - Groove (Am 93).wav",
+      "lead": "Stems/Starboy/Starboy - Lead (Am 93).wav",
+      "texture": "Stems/Starboy/Starboy - Texture (Am 93).wav"
+    },
+    "oggs": {
+      "groove": "stems-ogg/Starboy/Starboy - Groove (Am 93).ogg",
+      "lead": "stems-ogg/Starboy/Starboy - Lead (Am 93).ogg",
+      "texture": "stems-ogg/Starboy/Starboy - Texture (Am 93).ogg"
+    }
+  },
+  "Technologic": {
+    "code": "U9",
+    "album": "haa",
+    "key": "A",
+    "bpm": 127,
+    "stems": {
+      "groove": "Stems/Technologic/Technologic - Groove (A 127).wav",
+      "lead": "Stems/Technologic/Technologic - Lead (A 127).wav"
+    },
+    "oggs": {
+      "groove": "stems-ogg/Technologic/Technologic - Groove (A 127).ogg",
+      "lead": "stems-ogg/Technologic/Technologic - Lead (A 127).ogg"
+    }
+  },
+  "Too Long": {
+    "code": "D14",
+    "album": "discovery",
+    "key": "Fm",
+    "bpm": 127,
+    "stems": {
+      "groove": "Stems/Too Long/Too Long - Groove (Fm 127).wav"
+    },
+    "oggs": {
+      "groove": "stems-ogg/Too Long/Too Long - Groove (Fm 127).ogg"
+    }
+  },
+  "Too Long (Alive 2007)": {
+    "code": "A4",
+    "album": "alive",
+    "key": "Fm",
+    "bpm": 127,
+    "stems": {
+      "groove": "Stems/Too Long (Alive 2007)/Too Long (Alive 2007) - Groove (Fm 127).wav",
+      "texture": "Stems/Too Long (Alive 2007)/Too Long (Alive 2007) - Texture (Fm 127).wav"
+    },
+    "oggs": {
+      "groove": "stems-ogg/Too Long (Alive 2007)/Too Long (Alive 2007) - Groove (Fm 127).ogg",
+      "texture": "stems-ogg/Too Long (Alive 2007)/Too Long (Alive 2007) - Texture (Fm 127).ogg"
+    }
+  },
+  "Voyager": {
+    "code": "D10",
+    "album": "discovery",
+    "key": "Em",
+    "bpm": 121,
+    "stems": {
+      "groove": "Stems/Voyager/Voyager - Groove (Em 121).wav",
+      "lead": "Stems/Voyager/Voyager - Lead (Em 121).wav",
+      "texture": "Stems/Voyager/Voyager - Texture (Em 121).wav"
+    },
+    "oggs": {
+      "groove": "stems-ogg/Voyager/Voyager - Groove (Em 121).ogg",
+      "lead": "stems-ogg/Voyager/Voyager - Lead (Em 121).ogg",
+      "texture": "stems-ogg/Voyager/Voyager - Texture (Em 121).ogg"
+    }
+  }
+}

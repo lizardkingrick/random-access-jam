@@ -1,26 +1,174 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="color-scheme" content="dark" />
-    <meta name="theme-color" content="#05060a" />
-    <meta
-      name="description"
-      content="Random Access Jam — a beginner-friendly browser DJ mixer. Upload tracks, blend two decks, and watch the neon tunnel react."
-    />
-    <title>Random Access Jam</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap"
-    />
-    <link rel="icon" type="image/svg+xml" href="./icons/icon.svg" />
-  </head>
-  <body>
-    <canvas id="visualizer" aria-hidden="true"></canvas>
-    <div id="app"></div>
-    <script type="module" src="/src/main.js"></script>
-  </body>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dream Chamber Remixed</title>
+<meta name="description" content="Jam with Daft Punk stems in your browser — pick a groove, lead and extra from different songs, auto-synced in tempo and key. Inspired by The Daft Punk Experience.">
+<meta name="theme-color" content="#03040c">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:wght@500;600;700;800&family=Barlow:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M8 30 30 8M14 62 62 14M44 70 70 44' stroke='%232f8cff' stroke-width='14' stroke-linecap='round'/></svg>">
+</head>
+<body>
+<canvas id="stage" aria-hidden="true"></canvas>
+<div class="scrim" aria-hidden="true"></div>
+
+<div class="app" id="app">
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 48 48" aria-hidden="true"><path d="M8 26 24 10M10 38 34 14M22 40 40 22" stroke="currentColor" stroke-width="5" stroke-linecap="round"/></svg>
+      <div>
+        <h1>Dream Chamber <span>Remixed</span> <em class="ver" id="version">v1.0 beta</em></h1>
+        <p>The Daft Punk Experience · stem jam</p>
+      </div>
+    </div>
+
+    <div class="clock" aria-live="off">
+      <span class="clock-bar" id="barReadout">BAR --</span>
+      <span class="beat-dots" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+    </div>
+
+    <nav class="transport" aria-label="Transport">
+      <button class="tbtn tbtn-play" id="playBtn" title="Play / stop (P)">
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="i-play"><path d="M7 4.5v15l12-7.5z" fill="currentColor"/></svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="i-stop"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
+        <span class="tlabel">Play</span>
+      </button>
+      <button class="tbtn" id="randomBtn" title="Random mix (R)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h3.5c2 0 3.2 1 4.3 2.7l2.4 4.6c1 1.7 2.3 2.7 4.3 2.7H21M3 17h3.5c1.4 0 2.4-.5 3.2-1.4M14.3 8.4c.8-.9 1.8-1.4 3.2-1.4H21M18 4l3 3-3 3M18 14l3 3-3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="tlabel">Random</span>
+      </button>
+      <button class="tbtn tbtn-rec" id="recBtn" title="Record the jam to a file">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6" fill="currentColor"/></svg>
+        <span class="tlabel">Rec</span>
+      </button>
+      <button class="tbtn" id="exportBtn" title="Download one 32-bar loop as WAV">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="tlabel">Export</span>
+      </button>
+      <button class="tbtn" id="shareBtn" title="Copy a link to this mix">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3A4 4 0 0 0 11 18.7l1-1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <span class="tlabel">Share</span>
+      </button>
+      <label class="master-vol" title="Master volume">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <input type="range" id="masterVol" min="0" max="1" step="0.01" value="0.9" aria-label="Master volume">
+      </label>
+      <button class="tbtn tbtn-icon" id="helpBtn" title="Controls (?)" aria-label="Controls and help">?</button>
+    </nav>
+  </header>
+
+  <aside class="left">
+    <div class="controls">
+      <div class="ctl">
+        <div class="ctl-label">Tempo</div>
+        <div class="pill tempo">
+          <button id="tempoDown" aria-label="Slower"><kbd class="kc" data-kb="−" data-pad="▼"></kbd></button>
+          <output id="bpmOut" aria-live="polite">116</output>
+          <button id="tempoUp" aria-label="Faster"><kbd class="kc" data-kb="+" data-pad="▲"></kbd></button>
+        </div>
+        <div class="ctl-sub" id="tempoSub">BPM</div>
+      </div>
+      <div class="ctl">
+        <div class="ctl-label">Key</div>
+        <div class="pill key">
+          <button id="keyLockBtn" class="lock" aria-pressed="true" title="Key lock: shift every stem into one key">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2" fill="currentColor"/><path class="shackle" d="M8 11V8a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2.2"/></svg>
+          </button>
+          <select id="masterKey" aria-label="Master key"></select>
+        </div>
+        <div class="ctl-sub" id="keySub">Auto</div>
+      </div>
+    </div>
+
+    <button class="fx-btn" id="fxBtn" aria-describedby="fxHint">
+      <kbd class="kc kc-lg" data-kb="Space" data-pad="X"></kbd>
+      <span class="fx-text">Audio FX <em>(Hold)</em></span>
+    </button>
+    <p class="fx-hint" id="fxHint">Hold &amp; move: ← filter · → highpass · ↑ echo</p>
+
+    <ol class="layers" id="layers" aria-label="Your mix"></ol>
+  </aside>
+
+  <section class="right" aria-label="Song wheel">
+    <div class="wheel-wrap" id="wheelWrap">
+      <svg id="wheel" class="wheel"></svg>
+      <div class="hub" id="hub">
+        <svg class="hub-ring" id="hubRing" viewBox="0 0 300 300" aria-hidden="true"></svg>
+        <div class="hub-cats" role="tablist" aria-label="Layer to fill" id="hubCats"></div>
+        <div class="hub-body" id="hubBody" aria-live="polite">
+          <div class="hub-icon" id="hubIcon"></div>
+          <div class="hub-title" id="hubTitle">Groove</div>
+          <div class="hub-sub" id="hubSub"></div>
+        </div>
+        <kbd class="kc hub-kc" data-kb="C" data-pad="Y" aria-hidden="true"></kbd>
+      </div>
+    </div>
+
+    <div class="albums">
+      <button class="album-nav" id="albumPrev" aria-label="Previous album"><kbd class="kc" data-kb="Q" data-pad="LB" data-touch="‹"></kbd></button>
+      <div class="album-strip" id="albumStrip" role="tablist" aria-label="Albums"></div>
+      <button class="album-nav" id="albumNext" aria-label="Next album"><kbd class="kc" data-kb="E" data-pad="RB" data-touch="›"></kbd></button>
+    </div>
+    <div class="album-name" id="albumName"></div>
+  </section>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<div class="fx-pad" id="fxPad" aria-hidden="true">
+  <div class="fx-axis fx-axis-x"></div>
+  <div class="fx-axis fx-axis-y"></div>
+  <span class="fx-lab fx-l">Low-pass</span>
+  <span class="fx-lab fx-r">High-pass</span>
+  <span class="fx-lab fx-t">Echo</span>
+  <div class="fx-dot" id="fxDot"></div>
+</div>
+
+<dialog class="help" id="help">
+  <form method="dialog">
+    <h2>How to jam</h2>
+    <ol class="steps">
+      <li><b>Pick a layer</b> in the middle of the wheel — <i class="c-groove">Groove</i>, <i class="c-lead">Lead</i> or <i class="c-texture">Extra</i>.</li>
+      <li><b>Pick a song</b> on the wheel. It drops in on the next bar, synced to the tempo and key.</li>
+      <li><b>Mix songs</b> — fill each layer from a different track. Flip albums with the tiles under the wheel.</li>
+      <li><b>Hold Audio FX</b> and move to sweep a filter and echo.</li>
+    </ol>
+    <div class="keys">
+      <section><h3>Keyboard</h3>
+        <dl>
+          <dt><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> / <kbd>C</kbd></dt><dd>Groove / Lead / Extra</dd>
+          <dt><kbd>←</kbd><kbd>→</kbd> <kbd>Enter</kbd></dt><dd>Move around the wheel, pick</dd>
+          <dt><kbd>Q</kbd><kbd>E</kbd></dt><dd>Previous / next album</dd>
+          <dt><kbd>Space</kbd> + mouse</dt><dd>Hold Audio FX</dd>
+          <dt><kbd>−</kbd><kbd>+</kbd></dt><dd>Tempo</dd>
+          <dt><kbd>P</kbd> <kbd>R</kbd></dt><dd>Play/stop · random mix</dd>
+          <dt><kbd>M</kbd> <kbd>Backspace</kbd></dt><dd>Mute / clear current layer</dd>
+        </dl>
+      </section>
+      <section><h3>Controller</h3>
+        <dl>
+          <dt>Left stick + <kbd>A</kbd></dt><dd>Point at a song, pick</dd>
+          <dt><kbd>Y</kbd></dt><dd>Next layer</dd>
+          <dt><kbd>LB</kbd><kbd>RB</kbd></dt><dd>Albums</dd>
+          <dt><kbd>X</kbd> + right stick</dt><dd>Audio FX</dd>
+          <dt>D-pad <kbd>▲</kbd><kbd>▼</kbd></dt><dd>Tempo</dd>
+          <dt><kbd>B</kbd> · <kbd>Start</kbd></dt><dd>Clear layer · play/stop</dd>
+        </dl>
+      </section>
+    </div>
+    <p class="fine">Stems are 32-bar loops from The Daft Punk Experience. Fan project — audio © Daft Punk / their labels.<br>
+      Made by <a href="https://github.com/lizardkingrick" target="_blank" rel="noopener">Lizardkingrick</a> with
+      <a href="https://github.com/MuscularCrab" target="_blank" rel="noopener">MuscularCrab</a> (audio engine, from <a href="https://github.com/MuscularCrab/dreamchamberremixed" target="_blank" rel="noopener">Dream Chamber Studios Remixed</a>)
+      and 2Liter (<a href="https://www.instagram.com/the_peoples_yinzer/" target="_blank" rel="noopener">@the_peoples_yinzer</a>).
+      <a href="https://github.com/lizardkingrick/random-access-jam" target="_blank" rel="noopener">Source on GitHub</a> · <span class="ver-fine"></span></p>
+    <button class="help-close" value="close">Let's jam</button>
+  </form>
+</dialog>
+
+<script type="module" src="js/main.js"></script>
+</body>
 </html>
