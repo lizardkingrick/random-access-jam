@@ -1,5 +1,13 @@
+# Copyrighted audio: never commit
+stems-ogg/
+Stems/
+*.wav
+*.ogg
+*.flac
+
+# Build / tooling
 node_modules/
 dist/
-dev-dist/
+.wrangler/
 .DS_Store
-*.local
+.env*

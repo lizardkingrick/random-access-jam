@@ -1,140 +1,111 @@
-# Random Access Jam
+# Dream Chamber Remixed
 
-A beginner-friendly, 100% client-side browser **stem jam** app — a
-Fortnite-Festival / Fuser–style **4-position rack**. Load stems (vocals,
-drums, bass, lead) from *any* combination of tracks, and the engine locks
-everything to one master tempo + key with pitch-preserving time-stretch, so
-any four loops play together. All assets and demo sounds are original.
+**Version 1.0 beta** · **Live at [hiddenalchemist.com](https://hiddenalchemist.com)**
 
-Two procedurally synthesized demo stem sets are generated on first run (via
-`OfflineAudioContext`) and cached in IndexedDB, so the app is instantly
-playable with nothing uploaded — it boots into a cross-track mashup. No
-server, no analytics, no network calls at runtime — only Google Fonts, which
-the service worker caches for offline use.
+A browser jam station inspired by the remix area of **The Daft Punk Experience** in
+Fortnite. Fill three layers (**Groove**, **Lead** and **Extra**) with stems from different
+Daft Punk songs on a radial song wheel. Every stem is time-stretched to one tempo and
+pitch-shifted to one key, so any combination stays in sync. It runs entirely in the browser:
+there is no account and no install.
 
-## The core model
+## Features
 
-The jam is a **4-position rack, not a two-deck crossfader**:
+- **Fortnite-style song wheel.** Each album is a page of the wheel. The hub in the middle
+  switches layers and counts through the 32-bar loop.
+- **Auto-sync.** Stems are conformed to the master tempo (80–140 BPM) using WSOLA time-stretch.
+  Key lock shifts every stem into a single key. Song swaps land on the next bar.
+- **24 songs, 57 stems.** They cover Homework, Discovery, Human After All, Alive 2007,
+  Random Access Memories and the Weeknd collaborations.
+- **Audio FX (hold).** Drag to sweep a low-pass or high-pass filter and add tempo-synced echo.
+- **Reactive stage.** A neon dome, orbiting light strands and a turntable floor. Each active
+  layer adds an object: a wire sphere for Groove, a disco ball for Lead and a gold speaker
+  cube for Extra.
+- **Share, record and export.** A share link stores the whole mix in its URL. You can also
+  record the jam to a file or export one 32-bar loop as a WAV.
+- **Keyboard, mouse, touch and game controllers**, with a layout for phones.
 
-- Four fixed positions: **vocals, drums, bass, lead**.
-- Each position is sourced **independently from any loaded track** — vocals
-  from song A over drums from song B over bass from song C.
-- All active positions play **simultaneously, summed** (A *and* B *and* C).
-- Any position may be empty; two positions may pull from the same track.
-- Every stem is conformed to the **master BPM (90–157) + master key** via
-  offline pitch-preserving time-stretch (vendored
-  [Signalsmith Stretch](https://signalsmith-audio.co.uk/code/stretch/), MIT),
-  with a half/double-time guard so extreme ratios never sound stretched.
-- Loops launch **quantized to the bar grid** and restart in lockstep on every
-  16-bar loop boundary — nothing ever drifts.
+## Controls
 
-## Quick start
+| | Keyboard / mouse | Controller |
+|---|---|---|
+| Pick layer | `1` `2` `3`, `C` to cycle, or click a card / hub icon | `Y` |
+| Pick song | click a wheel segment, or `←` `→` + `Enter` | left stick + `A` |
+| Albums | `Q` / `E`, or the album tiles | `LB` / `RB` |
+| Audio FX | hold the FX button and drag, or hold `Space` and move the mouse | hold `X` + right stick |
+| Tempo | `−` / `+`, hold the pill buttons, or scroll on them | D-pad up/down |
+| Play / random | `P` / `R` | `Start` / `Back` |
+| Mute / clear layer | `M` / `Backspace` | `B` clears |
 
-```bash
+## Credits
+
+- **[Lizardkingrick](https://github.com/lizardkingrick)**: creator; UI, visuals and web app
+- **[MuscularCrab](https://github.com/MuscularCrab)**: contributor. Wrote the audio engine
+  (WSOLA time-stretch and pitch-shift, bar-quantized mixing, share links, record and export)
+  in [Dream Chamber Studios Remixed](https://github.com/MuscularCrab/dreamchamberremixed),
+  which this project builds on
+- **2Liter** ([@the_peoples_yinzer](https://www.instagram.com/the_peoples_yinzer/) on Instagram): contributor
+
+This is a fan project. It is not affiliated with Daft Punk, Epic Games or Fortnite. The stems
+come from The Daft Punk Experience and remain © Daft Punk and their labels. They are **not**
+included in this repository.
+
+## Run it locally
+
+You need [Node.js](https://nodejs.org) 18+ and [ffmpeg](https://ffmpeg.org) on your PATH.
+
+```
 npm install
-npm run dev      # local dev server
-npm run build    # production build to dist/
-npm run preview  # serve the production build locally
+npm run stems     # converts the WAV stems to Ogg and writes stems.json
+npm run dev       # http://localhost:8137/webapp/
 ```
 
-Regenerate the PWA icons (procedurally drawn, no design tools needed):
+`npm run stems` looks for the stems in a `Stems/` folder next to this repo by default. To use
+a different folder, run `npm run stems -- --stems <path>`. Files must be named
+`Stems/<Song>/<Song> - <Groove|Lead|Texture|All> (<Key> <BPM>).wav`, and each one must be a
+seamless 128-beat loop. When you add a new song, also add its album to `CATALOG` in
+`tools/build-stems.mjs`.
 
-```bash
-node scripts/make-icons.mjs
-```
+## Updating the site
 
-## How to jam
-
-1. **Tap anywhere** on the start screen (browsers require a gesture to unlock
-   audio). A demo mashup loads and starts.
-2. Each **rack card** (vocals/drums/bass/lead) has a source-track picker,
-   mute/solo, a volume slider, and a live level meter.
-3. **Drop stem files anywhere** (or click *+ Add tracks*). Files named like
-   `song_drums.wav`, `song_bass.wav` auto-assign roles; a dialog confirms
-   roles, title, source BPM and key (BPM/key are auto-detected, editable).
-   A single ordinary track becomes a "lead" stem.
-4. The **wheel** browses your library — clicking a slot assigns that track to
-   the **focused** position; right-click / long-press picks a specific role.
-5. Change **master BPM or key** in the transport strip — every position
-   re-conforms and swaps on the next loop boundary ("adjusting…").
-6. **Hold the Audio FX button** (or Space) for a filter-sweep breakdown.
-7. Press **?** for shortcuts and the mastering-glue A/B toggle.
-
-Keyboard: `1–4` focus a position · `M`/`S` mute/solo · `↑↓` volume ·
-`←→` master BPM · `Space` FX hold · `?` help.
-
-Tracks live in your browser's IndexedDB only — nothing leaves your machine.
-
-## Architecture
+The site is hosted on **Cloudflare Pages** (project `random-access-jam`, domain
+`hiddenalchemist.com`). The stems are uploaded straight from your machine; they never go through git.
 
 ```
-src/
-  main.js                 bootstrap, audio unlock, library ↔ wheel ↔ rack orchestration
-  ticker.js               single shared requestAnimationFrame loop (visuals only)
-  audio/
-    engine.js             AudioContext + master graph (rack → FX → master → analyser)
-    transport.js          master clock: BPM, bar grid, look-ahead scheduler, quantized launch
-    jamRack.js            the 4-position board: grid-locked looped sources, mute/solo/volume, EQ
-    timestretch.js        offline conform-to-grid via vendored Signalsmith Stretch WASM
-    mastering.js          glue compressor + limiter on the master bus (bypassable)
-    fx.js                 hold-to-activate lowpass sweep + rhythmic gain duck
-    analyze.js/-Worker.js optional BPM + key auto-detect (pure JS, off-thread)
-    demoLoops.js          OfflineAudioContext demo stem synthesis + WAV encoding
-    crossfader.js         retired from the core path; kept unwired for a future A/B rack fade
-  library/
-    store.js              IndexedDB stem-set schema (v2, migrates v1 single-file tracks)
-    intake.js             drag-drop/picker → role assignment → validate/decode/persist
-  ui/                     hud, wheel (track browser), rackCard, tempo (transport strip),
-                          toasts, help
-  visualizer/             analyser-driven neon tunnel, particles, wireframe props, beat detector
-  vendor/
-    signalsmith-stretch/  vendored WASM stretch (MIT) — the project's only vendored asset
+# one time only
+npx wrangler login
+
+# every release
+git add -A && git commit -m "What changed"
+git push
+npm run deploy               # goes live on hiddenalchemist.com
+npm run deploy -- preview    # or: test on a throwaway preview URL first
 ```
 
-## Deploying
+### Releasing a new version
 
-The build is a fully static site — any static host works.
+1. Bump the version in `package.json` and `js/version.js`. The app shows the version in the
+   top bar and the help screen.
+2. Add a section to `CHANGELOG.md`.
+3. Commit, then tag the release: `git tag v1.1.0 && git push --follow-tags`
+4. Run `npm run deploy`.
 
-**GitHub Pages**
+## Project layout
 
-```bash
-npm run build
-git subtree push --prefix dist origin gh-pages
-```
-
-Then enable Pages for the `gh-pages` branch in the repo settings. Assets use
-relative paths (`base: './'`), so any subpath works.
-
-**Netlify** — build command `npm run build`, publish directory `dist`.
-
-## Browser support & Safari caveats
-
-Current Chrome, Edge, and Firefox are fully supported. Safari notes:
-
-- The `webkitAudioContext` fallback is wired; `StereoPannerNode` is
-  feature-detected in the demo synth.
-- Conform renders need **AudioWorklet on OfflineAudioContext** (Safari 14.1+).
-  Where unavailable, a resample fallback keeps tempo right but shifts pitch
-  (logged to the console).
-- The start overlay guarantees the `AudioContext` resumes inside a gesture.
-- iOS Safari caps IndexedDB more tightly, and stem sets are ~4× the data of
-  single files — a friendly quota-exceeded message appears when full.
-
-## Accessibility
-
-- Full keyboard operation (see shortcuts above); the wheel is a listbox, the
-  rack cards are labeled groups with toggle buttons and sliders exposing
-  value text; toasts announce via a polite live region.
-- `prefers-reduced-motion` swaps the visualizer for a gentle static gradient.
-- Neon-styled visible focus rings; touch targets ≥ 44 px; responsive to 390 px.
-
-## Later horizon (deliberately not built yet)
-
-A/B rack-state crossfade, per-position filter knobs, hot cues/loops, mix
-recording via `MediaRecorder`, .zip stem-set import, catalog/subscription
-backend (Supabase + Stripe), Tauri desktop wrapper.
+| | |
+|---|---|
+| `index.html`, `style.css` | Layout and styling. Under 960px wide it stacks vertically for phones. |
+| `js/engine.js` | Audio graph, stem loading and conforming, transport, FX, record and export |
+| `js/stretch-worker.js` | WSOLA time-stretch and pitch-shift (MuscularCrab) |
+| `js/wheel.js` | SVG radial song wheel |
+| `js/stage.js` | Canvas background visuals |
+| `js/catalog.js` | Album pages, album badge art, layer icons |
+| `js/main.js` | UI wiring, keyboard and gamepad input, share links |
+| `js/version.js` | App version |
+| `tools/build-stems.mjs` | WAV → Ogg conversion and `stems.json` manifest |
+| `tools/deploy.mjs` | Builds `dist/` and uploads it to Cloudflare Pages |
+| `serve.mjs` | Zero-dependency local dev server |
+| `_headers` | Cloudflare Pages cache rules |
 
 ## License
 
-[MIT](LICENSE) — contributions welcome. Vendored Signalsmith Stretch is MIT
-(see `src/vendor/signalsmith-stretch/VENDORED.md`).
+The code is under the [MIT](LICENSE) license. The audio is not covered by it (see Credits).
