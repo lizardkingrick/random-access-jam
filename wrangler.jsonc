@@ -8,6 +8,7 @@
   },
   "workers_dev": true,
   "routes": [
-    { "pattern": "hiddenalchemist.com", "custom_domain": true }
+    { "pattern": "hiddenalchemist.com", "custom_domain": true },
+    { "pattern": "www.hiddenalchemist.com", "custom_domain": true }
   ]
 }
