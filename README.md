@@ -67,8 +67,11 @@ seamless 128-beat loop. When you add a new song, also add its album to `CATALOG`
 
 ## Updating the site
 
-The site is hosted on **Cloudflare Pages** (project `random-access-jam`, domain
-`hiddenalchemist.com`). The stems are uploaded straight from your machine; they never go through git.
+The site is hosted on **Cloudflare Workers static assets**, the successor to Cloudflare Pages.
+The Worker is named `random-access-jam` and serves the domain `hiddenalchemist.com`. Both are
+set in `wrangler.jsonc`. The stems are uploaded straight from your machine; they never go
+through git. Unchanged files are skipped on each deploy, so updates that touch only the code
+are quick.
 
 ```
 # one time only
@@ -78,8 +81,11 @@ npx wrangler login
 git add -A && git commit -m "What changed"
 git push
 npm run deploy               # goes live on hiddenalchemist.com
-npm run deploy -- preview    # or: test on a throwaway preview URL first
+npm run deploy -- preview    # or: upload a preview version first; the live site is unchanged
 ```
+
+To undo a bad release, roll back to the previous version in the Cloudflare dashboard
+(Workers & Pages → random-access-jam → Deployments) or run `npx wrangler rollback`.
 
 ### Releasing a new version
 
@@ -102,9 +108,10 @@ npm run deploy -- preview    # or: test on a throwaway preview URL first
 | `js/main.js` | UI wiring, keyboard and gamepad input, share links |
 | `js/version.js` | App version |
 | `tools/build-stems.mjs` | WAV → Ogg conversion and `stems.json` manifest |
-| `tools/deploy.mjs` | Builds `dist/` and uploads it to Cloudflare Pages |
+| `tools/deploy.mjs` | Builds `dist/` and deploys it with Wrangler |
+| `wrangler.jsonc` | Cloudflare config: Worker name, assets folder, custom domain |
 | `serve.mjs` | Zero-dependency local dev server |
-| `_headers` | Cloudflare Pages cache rules |
+| `_headers` | Cache rules for the hosted site |
 
 ## License
 

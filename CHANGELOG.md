@@ -14,4 +14,4 @@ The Daft Punk Experience remix station.
 - Audio engine from MuscularCrab's Dream Chamber Studios Remixed: WSOLA time-stretch and key
   shift, bar-quantized swaps, share links, recording and WAV loop export. Share links from
   that site still work.
-- Deployed to Cloudflare Pages at hiddenalchemist.com
+- Deployed to Cloudflare (Workers static assets) at hiddenalchemist.com
