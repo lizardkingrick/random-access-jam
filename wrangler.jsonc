@@ -1,0 +1,13 @@
+// Cloudflare Workers static-assets site (the successor to Cloudflare Pages).
+// `npm run deploy` builds dist/ (app + Ogg stems) and runs `wrangler deploy`.
+{
+  "name": "random-access-jam",
+  "compatibility_date": "2026-10-23",
+  "assets": {
+    "directory": "./dist"
+  },
+  "workers_dev": true,
+  "routes": [
+    { "pattern": "hiddenalchemist.com", "custom_domain": true }
+  ]
+}
