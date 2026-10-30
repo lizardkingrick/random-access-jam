@@ -1,9 +1,8 @@
 import * as E from './engine.js';
 import { state, LAYERS, NOTE, NOTE_NAMES, prettyKey } from './engine.js';
-import { ALBUMS, albumById, songsForAlbum, displayName, albumArtUnique, LAYER_ICONS } from './catalog.js';
+import { ALBUMS, albumById, songsForAlbum, displayName, albumArtUnique, loadCovers, LAYER_ICONS } from './catalog.js';
 import { createWheel } from './wheel.js';
 import { createStage } from './stage.js';
-import { loadHelmets } from './helmets.js';
 import { VERSION, VERSION_LABEL } from './version.js';
 
 const $ = (s, root = document) => root.querySelector(s);
@@ -13,7 +12,7 @@ const ui = {
   albums: [],          // album ids that have songs
   album: 0,
   peek: null,          // song under the pointer / stick
-  fx: { held: false, x: 0, y: 0, amount: 0, ox: 0, oy: 0 },
+  fx: { held: false, x: 0, amount: 0, type: 'lowpass' },
   mouse: { x: innerWidth / 2, y: innerHeight / 2 },
 };
 
@@ -41,12 +40,7 @@ const wheel = createWheel($('#wheel'), {
 });
 
 function pickSong(song) {
-  const label = layerDef(ui.layer).label;
-  if (!E.stemTypeFor(ui.layer, song)) {
-    const other = LAYERS.find((l) => E.stemTypeFor(l.id, song));
-    toast(`${displayName(song)} has no ${label} stem${other ? ` — try it as ${other.label}` : ''}`);
-    return;
-  }
+  if (!E.stemTypeFor(ui.layer, song)) return; // an empty slot for this layer: nothing to pick
   E.selectStem(ui.layer, song);
 }
 
@@ -75,25 +69,25 @@ function shiftLabel(song) {
 
 function renderHub() {
   const hub = $('#hub'), def = layerDef(ui.layer), s = state.layers[ui.layer];
+  // An empty slot (no stem for this layer) shows nothing, so the hub keeps the layer view.
+  const peek = ui.peek && E.stemTypeFor(ui.layer, ui.peek) ? ui.peek : null;
   hub.dataset.layer = ui.layer;
-  hub.classList.toggle('peek', !!ui.peek);
+  hub.classList.toggle('peek', !!peek);
   $('#hubCats').querySelectorAll('.hub-cat').forEach((b) => b.setAttribute('aria-selected', b.dataset.layer === ui.layer));
   const title = $('#hubTitle'), sub = $('#hubSub');
-  if (ui.peek) {
-    const info = E.MANIFEST[ui.peek];
+  if (peek) {
+    const info = E.MANIFEST[peek];
     const meta = `${prettyKey(info.key)} · ${info.bpm} BPM`;
     let html;
-    if (!E.stemTypeFor(ui.layer, ui.peek)) html = `${meta}<br>No ${def.label} stem`;
-    else if (s.song === ui.peek) {
+    if (s.song === peek) {
       const now = s.loading ? 'Loading…' : state.playing ? 'Playing' : 'Selected';
       html = `${meta}<br><b>${now}</b> · pick again to remove`;
     } else {
-      const part = info.parts && info.parts[E.stemTypeFor(ui.layer, ui.peek)];
+      const part = info.parts && info.parts[E.stemTypeFor(ui.layer, peek)];
       html = `${meta}<br>Add ${part ? `the ${part} ` : ''}as <b>${def.label}</b>`;
     }
-    setHub(title, displayName(ui.peek), sub, html);
+    setHub(title, displayName(peek), sub, html);
   } else {
-    if ($('#hubIcon').dataset.layer !== ui.layer) { $('#hubIcon').dataset.layer = ui.layer; $('#hubIcon').innerHTML = LAYER_ICONS[ui.layer]; }
     const name = def.label.toLowerCase();
     setHub(title, def.label, sub, s.song ? escapeHtml(displayName(s.song)) : `Pick ${/^[aeiou]/.test(name) ? 'an' : 'a'} ${name}`);
   }
@@ -320,82 +314,207 @@ function tickClock(m) {
   }
 }
 
-// ---------- Audio FX (hold) ----------
-function fxEngage(x, y) {
+// ---------- Audio FX: pick one in the strip, hold F (or the button) to play it ----------
+const FX_ICONS = {
+  stutter: '<path d="M4 7v10M8 7v10M13 7v10M17 7v10" stroke-width="2.6"/>',
+  lowpass: '<path d="M3 9h9c4 0 5 9 9 9"/>',
+  highpass: '<path d="M3 18c4 0 5-9 9-9h9"/>',
+  phaser: '<path d="M2 12c2.5-6 5-6 7.5 0s5 6 7.5 0 3-4 5-2"/><path d="M2 12c2.5 4 5 4 7.5 0s5-4 7.5 0 3 3 5 1" opacity=".55"/>',
+  wah: '<path d="M2 18c5 0 6-11 10-11s5 11 10 11"/>',
+  tapestop: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2"/><path d="M12 4a8 8 0 0 1 7.4 5" stroke-width="2.6"/>',
+};
+function loadFxChoice() {
+  try { const v = localStorage.getItem('dcr-fx'); if (E.FX.some((f) => f.id === v)) return v; } catch (_) { /* private mode */ }
+  return 'lowpass';
+}
+ui.fx.type = loadFxChoice();
+function setFxType(id) {
+  if (ui.fx.held) fxRelease(); // switching mid-hold: let the old one go cleanly
+  ui.fx.type = id;
+  try { localStorage.setItem('dcr-fx', id); } catch (_) { /* private mode */ }
+  renderFxPicker();
+}
+const cycleFx = (d) => {
+  const i = E.FX.findIndex((f) => f.id === ui.fx.type);
+  setFxType(E.FX[(i + d + E.FX.length) % E.FX.length].id);
+};
+function buildFxPicker() {
+  $('#fxPicker').innerHTML = E.FX.map((f) => `
+    <button class="fx-chip" role="radio" data-fx="${f.id}" title="${f.label}: ${f.desc}">
+      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${FX_ICONS[f.id]}</svg>
+      <span>${f.label}</span>
+    </button>`).join('');
+  $('#fxPicker').addEventListener('click', (e) => {
+    const b = e.target.closest('.fx-chip');
+    if (b) setFxType(b.dataset.fx);
+  });
+  renderFxPicker();
+}
+function renderFxPicker() {
+  const fx = E.FX.find((f) => f.id === ui.fx.type);
+  $('#fxPicker').querySelectorAll('.fx-chip').forEach((b) => b.setAttribute('aria-checked', b.dataset.fx === fx.id));
+  $('#fxName').textContent = fx.label;
+  $('#fxHint').textContent = fx.desc;
+}
+function fxEngage() {
+  if (ui.fx.held) return;
   E.ensureCtx();
   ui.fx.held = true;
-  ui.fx.ox = x; ui.fx.oy = y;
-  const pad = $('#fxPad');
-  pad.style.setProperty('--ox', `${x}px`);
-  $('.fx-axis-x', pad).style.top = `${y}px`;
-  $('.fx-axis-y', pad).style.left = `${x}px`;
-  pad.classList.add('on');
+  ui.fx.amount = 1;
+  ui.fx.x = ui.fx.type === 'lowpass' || ui.fx.type === 'tapestop' ? -1 : 1; // stage tint: violet or cyan
   $('#fxBtn').classList.add('held');
-  fxMove(x, y);
-}
-function fxMove(px, py) {
-  if (!ui.fx.held) return;
-  const span = Math.min(innerWidth, innerHeight) * 0.4;
-  let x = Math.max(-1, Math.min(1, (px - ui.fx.ox) / span));
-  const y = Math.max(0, Math.min(1, (ui.fx.oy - py) / span));
-  if (Math.abs(x) < 0.05) x = 0;
-  setFxValues(x, y);
-  const dot = $('#fxDot');
-  dot.style.setProperty('--x', `${ui.fx.ox + x * span}px`);
-  dot.style.setProperty('--y', `${ui.fx.oy - y * span}px`);
-}
-function setFxValues(x, y) {
-  ui.fx.x = x; ui.fx.y = y;
-  ui.fx.amount = Math.min(1, Math.abs(x) + y * 0.6);
-  E.setFx(x, y);
+  $('#fxPicker').classList.add('held');
+  E.fxStart(ui.fx.type);
 }
 function fxRelease() {
   if (!ui.fx.held) return;
   ui.fx.held = false;
   ui.fx.amount = 0;
-  $('#fxPad').classList.remove('on');
   $('#fxBtn').classList.remove('held');
-  E.releaseFx();
+  $('#fxPicker').classList.remove('held');
+  E.fxStop();
 }
 function bindFx() {
+  buildFxPicker();
   const btn = $('#fxBtn');
   btn.addEventListener('pointerdown', (e) => {
     btn.setPointerCapture(e.pointerId);
-    fxEngage(e.clientX, e.clientY);
+    fxEngage();
   });
-  btn.addEventListener('pointermove', (e) => fxMove(e.clientX, e.clientY));
   ['pointerup', 'pointercancel', 'lostpointercapture'].forEach((ev) => btn.addEventListener(ev, fxRelease));
   btn.addEventListener('click', (e) => e.preventDefault());
   addEventListener('pointermove', (e) => {
+    if (jam.on) return; // pointer lock: movement is read from mousemove deltas instead
     ui.mouse.x = e.clientX; ui.mouse.y = e.clientY;
-    if (e.pointerType === 'mouse') document.body.classList.remove('pad');
-    if (spaceHeld) fxMove(e.clientX, e.clientY);
+    if (e.pointerType === 'mouse') {
+      document.body.classList.remove('pad');
+      steerFromPointer(e.clientX, e.clientY);
+    }
   });
-  // Keys released in another window never reach us: forget Space too, or the next press is ignored.
-  addEventListener('blur', () => { spaceHeld = false; fxRelease(); });
+  // Keys released in another window never reach us: forget F too, or the next press is ignored.
+  addEventListener('blur', () => { fHeld = false; fxRelease(); });
 }
 
-// ---------- keyboard ----------
-let spaceHeld = false;
+// ---------- wheel steering ----------
+// The highlight follows the direction of the mouse from the wheel's centre, not exact hovering,
+// and stays on the last song pointed at; a click picks it.
+// Pointer position relative to the wheel, in its 600-unit viewBox (hub radius 150, rim 292).
+function wheelPolar(x, y) {
+  const r = $('#wheelWrap').getBoundingClientRect();
+  const dx = x - (r.left + r.width / 2), dy = y - (r.top + r.height / 2);
+  return { d: Math.hypot(dx, dy) / (r.width / 600), deg: Math.atan2(dx, -dy) * 180 / Math.PI };
+}
+function steerFromPointer(x, y, { dragging = false } = {}) {
+  const { d, deg } = wheelPolar(x, y);
+  // Hovering steers from the ring outward; while the button is held, anywhere off-centre does.
+  if (dragging ? d > 40 : d > 150 && d < 335) wheel.focusAngle(deg, { fromPointer: true });
+}
+
+// Hold and drag through the songs, let go to pick. A plain click is a
+// zero-length drag, so it still picks the song under the pointer. Letting go inside the hub
+// cancels.
+function bindWheelDrag() {
+  const wrap = $('#wheelWrap');
+  let drag = null;
+  const end = () => { drag = null; wrap.classList.remove('dragging'); };
+  wrap.addEventListener('pointerdown', (e) => {
+    if (jam.on || e.button !== 0 || e.target.closest('button')) return;
+    E.ensureCtx();
+    drag = e.pointerId;
+    wrap.setPointerCapture(e.pointerId);
+    wrap.classList.add('dragging');
+    steerFromPointer(e.clientX, e.clientY, { dragging: true });
+    if (e.pointerType === 'mouse') e.preventDefault(); // no text selection while dragging
+  });
+  wrap.addEventListener('pointermove', (e) => { if (e.pointerId === drag) steerFromPointer(e.clientX, e.clientY, { dragging: true }); });
+  wrap.addEventListener('pointerup', (e) => {
+    if (e.pointerId !== drag) return;
+    end();
+    if (wheelPolar(e.clientX, e.clientY).d > 150) wheel.pickFocused();
+  });
+  wrap.addEventListener('pointercancel', end); // e.g. the page started scrolling on a phone
+}
+
+// Jam mode: the cursor is captured (pointer lock) and mouse movement drives a virtual stick, so a
+// small flick toward a song highlights it and a click anywhere picks it. Tab (or Esc) exits.
+const jam = { on: false, vx: 0, vy: 0, fx: null, lastScroll: 0 };
+const JAM_RADIUS = 90, JAM_DEADZONE = 28;
+function enterJam() {
+  if (jam.on || !document.documentElement.requestPointerLock || !matchMedia('(pointer: fine)').matches) return;
+  E.ensureCtx();
+  const p = document.documentElement.requestPointerLock();
+  if (p && p.catch) p.catch(() => toast('Mouse capture was blocked. Point toward a song and click instead'));
+}
+// Some embedded browsers forbid pointer lock outright; don't offer a button that can't work.
+const jamAllowed = () => !document.featurePolicy || document.featurePolicy.allowsFeature('pointer-lock');
+const exitJam = () => { if (document.pointerLockElement) document.exitPointerLock(); };
+function bindJam() {
+  if (!jamAllowed()) { $('#jamBtn').hidden = true; return; }
+  $('#jamBtn').addEventListener('click', () => (jam.on ? exitJam() : enterJam()));
+  // Clicking empty space around the wheel and panels also enters, like stepping up to the deck.
+  $('#app').addEventListener('click', (e) => { if (e.target.matches('.app, .left, .right')) enterJam(); });
+  document.addEventListener('pointerlockchange', () => {
+    jam.on = !!document.pointerLockElement;
+    jam.vx = jam.vy = 0;
+    document.body.classList.toggle('jamming', jam.on);
+    if (!jam.on) { fHeld = false; fxRelease(); }
+  });
+  addEventListener('mousemove', (e) => {
+    if (!jam.on) return;
+    jam.vx += e.movementX;
+    jam.vy += e.movementY;
+    const m = Math.hypot(jam.vx, jam.vy);
+    if (m > JAM_RADIUS) { jam.vx *= JAM_RADIUS / m; jam.vy *= JAM_RADIUS / m; }
+    if (m > JAM_DEADZONE) wheel.focusAngle(Math.atan2(jam.vx, -jam.vy) * 180 / Math.PI, { fromPointer: true });
+  });
+  // Hold, flick through the songs, let go to pick.
+  addEventListener('mousedown', (e) => { if (jam.on) e.preventDefault(); });
+  addEventListener('mouseup', (e) => {
+    if (!jam.on || e.button !== 0) return;
+    if (wheel.pickable) wheel.pickFocused();
+    else if (!wheel.focused) toast('Move the mouse toward a song, then let go');
+  });
+  // In the jam a click only ever picks the highlighted song: never let it also reach whatever
+  // sits under the (hidden) cursor.
+  addEventListener('click', (e) => { if (jam.on) { e.stopPropagation(); e.preventDefault(); } }, true);
+  // Scroll steps the highlight one song at a time.
+  addEventListener('wheel', (e) => {
+    if (!jam.on) return;
+    e.preventDefault();
+    if (performance.now() - jam.lastScroll < 120 || !e.deltaY) return;
+    jam.lastScroll = performance.now();
+    wheel.move(e.deltaY > 0 ? 1 : -1);
+  }, { passive: false });
+}
+
+// ---------- keyboard: Space layer, F FX, Z/C tempo, A/D albums, Q/E pick FX, Tab exit ----------
+let fHeld = false;
 function bindKeys() {
   addEventListener('keydown', (e) => {
     document.body.classList.remove('pad');
     if ($('#help').open || e.ctrlKey || e.metaKey || e.altKey) return;
-    const inField = e.target.matches('input, select, textarea');
-    if (e.key === ' ') {
-      if (e.target.matches('select, textarea')) return;
-      e.preventDefault();
-      if (!e.repeat && !spaceHeld) { spaceHeld = true; fxEngage(ui.mouse.x, ui.mouse.y); }
+    if (e.key === 'Tab') { // Exit Jam; outside the jam Tab keeps moving focus as usual
+      if (jam.on) { e.preventDefault(); exitJam(); }
       return;
     }
+    if (e.target.matches('select, textarea, input:not([type="range"])')) return;
+    const inField = e.target.matches('input');
     if (inField && e.key.startsWith('Arrow')) return;
     const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-    // Holding a toggle key would re-fire it (add/remove/add, a burst of random mixes).
-    if (e.repeat && !/^(Arrow|[-+=_])/.test(k)) { e.preventDefault(); return; }
+    if (k === 'f') {
+      e.preventDefault();
+      if (!e.repeat && !fHeld) { fHeld = true; fxEngage(); }
+      return;
+    }
+    // Holding a toggle key would re-fire it (add/remove/add, a burst of random mixes); tempo and
+    // arrow keys repeat on purpose.
+    if (e.repeat && !/^(Arrow|[zc\-+=_])/.test(k)) { e.preventDefault(); return; }
     const actions = {
+      ' ': () => cycleLayer(1),
       1: () => setLayer('groove'), 2: () => setLayer('lead'), 3: () => setLayer('texture'),
-      c: () => cycleLayer(1),
-      q: () => setAlbum(ui.album - 1), e: () => setAlbum(ui.album + 1),
+      z: () => E.setBpm(state.bpm - 1), c: () => E.setBpm(state.bpm + 1),
+      a: () => setAlbum(ui.album - 1), d: () => setAlbum(ui.album + 1),
+      q: () => cycleFx(-1), e: () => cycleFx(1),
       ArrowLeft: () => wheel.move(-1), ArrowUp: () => wheel.move(-1),
       ArrowRight: () => wheel.move(1), ArrowDown: () => wheel.move(1),
       Enter: () => { if (!e.target.closest('button, a, .seg') && wheel.focused) wheel.pickFocused(); else return false; },
@@ -404,12 +523,13 @@ function bindKeys() {
       Backspace: () => E.clearLayer(ui.layer), Delete: () => E.clearLayer(ui.layer),
       '+': () => E.setBpm(state.bpm + 1), '=': () => E.setBpm(state.bpm + 1),
       '-': () => E.setBpm(state.bpm - 1), '_': () => E.setBpm(state.bpm - 1),
-      '?': () => $('#help').showModal(), h: () => $('#help').showModal(),
+      '?': () => { exitJam(); $('#help').showModal(); }, h: () => { exitJam(); $('#help').showModal(); },
     };
     if (actions[k] && actions[k]() !== false) e.preventDefault();
   });
   addEventListener('keyup', (e) => {
-    if (e.key === ' ') { spaceHeld = false; fxRelease(); }
+    if (e.key === ' ') e.preventDefault(); // or a focused button would also be clicked
+    if (e.key.toLowerCase() === 'f') { fHeld = false; fxRelease(); }
   });
 }
 
@@ -452,10 +572,10 @@ function pollGamepad() {
     if (E.ctx && E.ctx.state !== 'running') toast('Click or press any key to turn the sound on');
   }
   if (down(8)) E.randomize();
-  if (pressed[2]) {
-    if (!ui.fx.held) { E.ensureCtx(); ui.fx.held = true; $('#fxBtn').classList.add('held'); }
-    setFxValues(Math.abs(rx) < 0.08 ? 0 : rx, Math.max(0, -ry));
-  } else if (prevButtons[2]) fxRelease();
+  if (down(6)) cycleFx(-1); // LT / RT choose the effect, X plays it
+  if (down(7)) cycleFx(1);
+  if (pressed[2]) fxEngage();
+  else if (prevButtons[2]) fxRelease();
   pressed.forEach((p, i) => (prevButtons[i] = p));
 }
 
@@ -542,7 +662,7 @@ async function boot() {
   $('#version').textContent = VERSION_LABEL;
   $('.ver-fine').textContent = `Version ${VERSION}`;
   try {
-    await E.loadManifest('stems.json');
+    await Promise.all([E.loadManifest('stems.json'), loadCovers()]);
   } catch (err) {
     console.error(err);
     toast('Could not load stems.json — run tools/build-stems.mjs first', 'error');
@@ -558,6 +678,8 @@ async function boot() {
   buildControls();
   bindFx();
   bindKeys();
+  bindJam();
+  bindWheelDrag();
   addEventListener('gamepadconnected', () => { document.body.classList.add('pad'); toast('Controller connected'); });
   addEventListener('gamepaddisconnected', () => fxRelease());
   // Browsers only start audio after a click or key press (a controller doesn't count), and a
@@ -566,17 +688,21 @@ async function boot() {
   ['pointerdown', 'keydown'].forEach((ev) => addEventListener(ev, wake, { capture: true }));
 
   const helpEl = $('#help');
-  const stage = createStage($('#stage'), () => {
+  createStage($('#stage'), () => {
     const m = E.meters();
     tickClock(m);
     pollGamepad();
     const active = {};
     for (const l of LAYERS) { const s = state.layers[l.id]; active[l.id] = !!(s.song && s.source && !s.muted && state.playing); }
-    return { meters: m, active, playing: state.playing, bpm: state.bpm, fx: ui.fx.amount, fxX: ui.fx.x, zone: ui.zone, paused: helpEl.open };
+    return { meters: m, active, playing: state.playing, bpm: state.bpm, fx: ui.fx.amount, fxX: ui.fx.x, zone: ui.zone, open: ui.open, paused: helpEl.open };
   });
-  // Helmet models are optional local extras (see helmets.js); load them off the critical path.
-  if (E.LOCAL && E.LOCAL.helmets && E.LOCAL.helmets.length) loadHelmets(E.LOCAL).then((h) => stage.setHelmets(h));
-  const measureZone = () => { ui.zone = Math.max(0.3, $('#wheelWrap').getBoundingClientRect().left / innerWidth); };
+  // The stage centres its pyramid over the open area between the side panels; when the panels
+  // are stacked (phones, portrait) that's the whole width.
+  const measureZone = () => {
+    const wheel = $('#wheelWrap').getBoundingClientRect(), left = $('.left').getBoundingClientRect();
+    ui.zone = Math.max(0.3, wheel.left / innerWidth);
+    ui.open = left.right < wheel.left ? [left.right / innerWidth, wheel.left / innerWidth] : [0, 1];
+  };
   addEventListener('resize', measureZone);
   measureZone();
 

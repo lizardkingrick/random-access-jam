@@ -20,26 +20,30 @@ there is no account and no install.
   clipping. Exported loops go through the same chain.
 - **24 songs, 57 stems.** They cover Homework, Discovery, Human After All, Alive 2007,
   Random Access Memories and the Weeknd collaborations.
-- **Audio FX (hold).** Drag to sweep a low-pass or high-pass filter and add tempo-synced echo.
-- **Reactive stage.** A neon dome, orbiting light strands and a turntable floor. Each active
-  layer adds an object: a wire sphere for Groove, a disco ball for Lead and a gold speaker
-  cube for Extra.
+- **Audio FX (hold).** Pick one of six effects and hold `F` to play it: Stutter (repeats the last eighth note,
+  chopped), Low-pass and High-pass sweeps, Phaser, Wah, and Tape stop. Letting go snaps back in time.
+- **Background.** A starry night sky for now; a new music visualizer is in the works. The hook a
+  visualizer plugs into (what it gets each frame: levels, spectrum, beat, layout) is documented at
+  the top of `js/stage.js`.
 - **Local extras.** When you run it locally next to the extra rips, the wheel gets an
   **Instrument Guns** page (each song's backing track, melody gun and rhythm gun as Groove,
-  Lead and Extra), and the stage shows dotted holograms of the two helmets that nod to the beat.
+  Lead and Extra).
 - **Share, record and export.** A share link stores the whole mix in its URL. You can also
   record the jam to a file or export one 32-bar loop as a WAV.
 - **Keyboard, mouse, touch and game controllers**, with a layout for phones.
 
 ## Controls
 
+The keyboard layout follows The Daft Punk Experience on PC.
+
 | | Keyboard / mouse | Controller |
 |---|---|---|
-| Pick layer | `1` `2` `3`, `C` to cycle, or click a card / hub icon | `Y` |
-| Pick song | click a wheel segment, or `←` `→` + `Enter` | left stick + `A` |
-| Albums | `Q` / `E`, or the album tiles | `LB` / `RB` |
-| Audio FX | hold the FX button and drag, or hold `Space` and move the mouse | hold `X` + right stick |
-| Tempo | `−` / `+`, hold the pill buttons, or scroll on them | D-pad up/down |
+| Pick song | hold the mouse button, drag through the songs, let go to pick (or just click); the highlight stays on the last song pointed at. Or `←` `→` + `Enter` | left stick + `A` |
+| Next layer | `Space` (`1` `2` `3` jump straight to Groove / Lead / Extra) | `Y` |
+| Audio FX | pick one in the FX strip (or `Q` / `E`), then hold `F` or the FX button | `LT` / `RT` pick, hold `X` |
+| Tempo | `Z` / `C`, or the pill buttons | D-pad up/down |
+| Albums | `A` / `D`, or the album tiles | `LB` / `RB` |
+| Jam mode | **Enter Jam** (top left) or click empty space: hides the cursor so small mouse flicks steer the wheel and releasing the button picks; `Tab` exits | |
 | Play / random | `P` / `R` | `Start` / `Back` |
 | Mute / clear layer | `M` / `Backspace` | `B` clears |
 
@@ -67,8 +71,6 @@ above it. It also picks up, when they're there:
 
 - `Instrument Guns & Backing Tracks\<Song>\<Song> - Melody Gun.wav` (and Backing Track,
   Rhythm Gun): adds the **Instrument Guns** page to the wheel
-- `Bonus\3D Helmets\TB3 Fortnite.obj` and `GM08 Fortnite.obj` (or the Snapchat versions):
-  adds the helmet holograms to the stage
 
 To open it from a phone, tablet or another PC on your network, start it with **`start.cmd -Lan`**.
 The server window then lists `On your network: http://<this PC's address>:8137/`; open that on
@@ -99,6 +101,12 @@ a different folder, run `npm run stems -- --stems <path>`. Files must be named
 `Stems/<Song>/<Song> - <Groove|Lead|Texture|All> (<Key> <BPM>).wav`, and each one must be a
 seamless loop (normally 128 beats; any whole number of bars works). When you add a new song,
 also add its album to `CATALOG` in `tools/build-stems.mjs` and to `SONGS` in `js/manifest.js`.
+
+To show real album covers, put your images in an `album_cover` folder next to this repo, named
+after the album (for example `Random_Access_Memories.jpeg` or `Starboy.jpg`), and run
+`npm run covers`. It makes small 256 px copies in `covers/`, which are deployed with the site. Like
+the stems, the covers are copyrighted and stay out of git. Without them, the app uses its own
+drawn art.
 
 ## Updating the site
 
@@ -139,8 +147,7 @@ To undo a bad release, roll back to the previous version in the Cloudflare dashb
 | `js/stretch-worker.js` | WSOLA time-stretch and pitch-shift (MuscularCrab) |
 | `js/manifest.js` | Song catalogue; builds the song list from a local folder listing |
 | `js/wheel.js` | SVG radial song wheel |
-| `js/stage.js` | Canvas background visuals |
-| `js/helmets.js` | Loads the optional helmet models as point clouds for the stage |
+| `js/stage.js` | Canvas background (placeholder starfield; the visualizer hook is documented at the top) |
 | `js/catalog.js` | Album pages, album badge art, layer icons |
 | `js/main.js` | UI wiring, keyboard and gamepad input, share links |
 | `js/version.js` | App version |

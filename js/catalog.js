@@ -1,13 +1,14 @@
-// Album pages for the wheel (LB/RB in Fortnite) and the little badge art.
-// The art is original abstract SVG — no real cover artwork is bundled.
+// Album pages for the wheel (LB/RB on a controller) and the little badge art.
+// Real covers come from covers/ when present (see loadCovers); otherwise the drawn SVG art.
 
+// Page order on the album strip: studio albums, the Weeknd collabs, then the live album.
 export const ALBUMS = [
   { id: 'homework', name: 'Homework', year: 1997 },
   { id: 'discovery', name: 'Discovery', year: 2001 },
   { id: 'haa', name: 'Human After All', year: 2005 },
-  { id: 'alive', name: 'Alive 2007', year: 2007 },
   { id: 'ram', name: 'Random Access Memories', year: 2013 },
   { id: 'weeknd', name: 'The Weeknd Collabs', year: 2016 },
+  { id: 'alive', name: 'Alive 2007', year: 2007 },
   // The instrument-gun area's loops (local extras): backing track, melody gun and rhythm gun.
   { id: 'guns', name: 'Instrument Guns', year: 0 },
 ];
@@ -77,10 +78,21 @@ const ART = {
 export const albumArt = (id) =>
   `<svg viewBox="0 0 100 100" aria-hidden="true" preserveAspectRatio="xMidYMid slice">${(ART[id] || ART.other)}</svg>`;
 
+// Real album covers: covers/<album>.jpg, made by tools/build-covers.mjs from your own copies and
+// listed in covers/covers.json. They aren't in the repo; without them the drawn art is used.
+const covers = new Set();
+export async function loadCovers() {
+  try {
+    const res = await fetch('covers/covers.json', { cache: 'no-cache' });
+    if (res.ok) for (const id of await res.json()) covers.add(id);
+  } catch (_) { /* no covers: drawn art */ }
+}
+
 // SVG ids inside inline art must be unique per instance, or the second copy
 // of a gradient silently resolves to the first one's (possibly hidden) defs.
 let artSeq = 0;
 export function albumArtUnique(id) {
+  if (covers.has(id)) return `<img src="covers/${id}.jpg" alt="" draggable="false" decoding="async">`;
   const n = ++artSeq;
   return albumArt(id).replace(/id="(\w+)"/g, `id="$1_${n}"`).replace(/url\(#(\w+)\)/g, `url(#$1_${n})`);
 }

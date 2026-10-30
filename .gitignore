@@ -1,5 +1,6 @@
 # Copyrighted audio: never commit
 stems-ogg/
+covers/
 Stems/
 *.wav
 *.ogg

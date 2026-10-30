@@ -69,13 +69,19 @@
   </header>
 
   <aside class="left">
+    <button class="jam-btn" id="jamBtn" type="button" title="Capture the mouse to steer the wheel (Tab or Esc to exit)">
+      <kbd class="kc" data-kb="Tab" data-pad="Tab"></kbd>
+      <svg class="jam-mouse" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="3" width="12" height="18" rx="6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span class="jam-on">Exit Jam</span>
+      <span class="jam-off">Enter Jam <small>mouse steers the wheel</small></span>
+    </button>
     <div class="controls">
       <div class="ctl">
         <div class="ctl-label">Tempo</div>
         <div class="pill tempo">
-          <button id="tempoDown" aria-label="Slower"><kbd class="kc" data-kb="−" data-pad="▼"></kbd></button>
+          <button id="tempoDown" aria-label="Slower"><kbd class="kc" data-kb="Z" data-pad="▼" data-touch="−"></kbd></button>
           <output id="bpmOut" aria-live="polite">116</output>
-          <button id="tempoUp" aria-label="Faster"><kbd class="kc" data-kb="+" data-pad="▲"></kbd></button>
+          <button id="tempoUp" aria-label="Faster"><kbd class="kc" data-kb="C" data-pad="▲" data-touch="+"></kbd></button>
         </div>
         <div class="ctl-sub" id="tempoSub">BPM</div>
       </div>
@@ -91,11 +97,19 @@
       </div>
     </div>
 
-    <button class="fx-btn" id="fxBtn" aria-describedby="fxHint">
-      <kbd class="kc kc-lg" data-kb="Space" data-pad="X"></kbd>
-      <span class="fx-text">Audio FX <em>(Hold)</em></span>
-    </button>
-    <p class="fx-hint" id="fxHint">Hold &amp; move: ← filter · → highpass · ↑ echo</p>
+    <section class="fx" aria-label="Audio FX">
+      <button class="fx-btn" id="fxBtn" aria-describedby="fxHint">
+        <kbd class="kc kc-lg" data-kb="F" data-pad="X"></kbd>
+        <span class="fx-text">Audio FX <em>(Hold)</em></span>
+        <span class="fx-name" id="fxName">Low-pass</span>
+      </button>
+      <div class="fx-row">
+        <kbd class="kc fx-kc" data-kb="Q" data-pad="LT" aria-hidden="true"></kbd>
+        <div class="fx-picker" id="fxPicker" role="radiogroup" aria-label="Choose the effect"></div>
+        <kbd class="kc fx-kc" data-kb="E" data-pad="RT" aria-hidden="true"></kbd>
+      </div>
+      <p class="fx-hint" id="fxHint"></p>
+    </section>
 
     <ol class="layers" id="layers" aria-label="Your mix"></ol>
   </aside>
@@ -107,18 +121,17 @@
         <svg class="hub-ring" id="hubRing" viewBox="0 0 300 300" aria-hidden="true"></svg>
         <div class="hub-cats" role="tablist" aria-label="Layer to fill" id="hubCats"></div>
         <div class="hub-body" id="hubBody" aria-live="polite">
-          <div class="hub-icon" id="hubIcon"></div>
           <div class="hub-title" id="hubTitle">Groove</div>
           <div class="hub-sub" id="hubSub"></div>
         </div>
-        <kbd class="kc hub-kc" data-kb="C" data-pad="Y" aria-hidden="true"></kbd>
+        <kbd class="kc hub-kc" data-kb="" data-pad="Y" aria-hidden="true" title="Space: next layer"><svg viewBox="0 0 24 24"><path d="M5 10.5v5h14v-5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></kbd>
       </div>
     </div>
 
     <div class="albums">
-      <button class="album-nav" id="albumPrev" aria-label="Previous album"><kbd class="kc" data-kb="Q" data-pad="LB" data-touch="‹"></kbd></button>
+      <button class="album-nav" id="albumPrev" aria-label="Previous album"><kbd class="kc" data-kb="A" data-pad="LB" data-touch="‹"></kbd></button>
       <div class="album-strip" id="albumStrip" role="tablist" aria-label="Albums"></div>
-      <button class="album-nav" id="albumNext" aria-label="Next album"><kbd class="kc" data-kb="E" data-pad="RB" data-touch="›"></kbd></button>
+      <button class="album-nav" id="albumNext" aria-label="Next album"><kbd class="kc" data-kb="D" data-pad="RB" data-touch="›"></kbd></button>
     </div>
     <div class="album-name" id="albumName"></div>
   </section>
@@ -126,32 +139,28 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<div class="fx-pad" id="fxPad" aria-hidden="true">
-  <div class="fx-axis fx-axis-x"></div>
-  <div class="fx-axis fx-axis-y"></div>
-  <span class="fx-lab fx-l">Low-pass</span>
-  <span class="fx-lab fx-r">High-pass</span>
-  <span class="fx-lab fx-t">Echo</span>
-  <div class="fx-dot" id="fxDot"></div>
-</div>
 
 <dialog class="help" id="help">
   <form method="dialog">
     <h2>How to jam</h2>
     <ol class="steps">
-      <li><b>Pick a layer</b> in the middle of the wheel — <i class="c-groove">Groove</i>, <i class="c-lead">Lead</i> or <i class="c-texture">Extra</i>.</li>
-      <li><b>Pick a song</b> on the wheel. It drops in on the next bar, synced to the tempo and key.</li>
-      <li><b>Mix songs</b> — fill each layer from a different track. Flip albums with the tiles under the wheel.</li>
-      <li><b>Hold Audio FX</b> and move to sweep a filter and echo.</li>
+      <li><b>Pick a layer</b>: <kbd>Space</kbd> switches between <i class="c-groove">Groove</i>, <i class="c-lead">Lead</i> and <i class="c-texture">Extra</i>.</li>
+      <li><b>Pick a song</b>: hold the mouse button, drag through the songs and let go on the one you want (or just click it). It drops in on the next bar, synced to the tempo and key. Songs without a stem for the current layer show as empty slots.</li>
+      <li><b>Mix songs</b>: fill each layer from a different track. <kbd>A</kbd> / <kbd>D</kbd> flip albums.</li>
+      <li><b>Pick an Audio FX</b> (stutter, low-pass, high-pass, phaser, wah or tape stop) under the Audio FX button, then <b>hold <kbd>F</kbd></b> to play it. Let go and it snaps back.</li>
     </ol>
+    <p class="jam-tip"><b>Enter Jam</b> (top left, or click empty space) hides the cursor so small mouse flicks steer the wheel. <kbd>Tab</kbd> exits.</p>
     <div class="keys">
-      <section><h3>Keyboard</h3>
+      <section><h3>Keyboard &amp; mouse</h3>
         <dl>
-          <dt><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> / <kbd>C</kbd></dt><dd>Groove / Lead / Extra</dd>
-          <dt><kbd>←</kbd><kbd>→</kbd> <kbd>Enter</kbd></dt><dd>Move around the wheel, pick</dd>
-          <dt><kbd>Q</kbd><kbd>E</kbd></dt><dd>Previous / next album</dd>
-          <dt><kbd>Space</kbd> + mouse</dt><dd>Hold Audio FX</dd>
-          <dt><kbd>−</kbd><kbd>+</kbd></dt><dd>Tempo</dd>
+          <dt>Hold, drag, let go</dt><dd>Pick a song (or click it)</dd>
+          <dt><kbd>Space</kbd></dt><dd>Next layer (<kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> jump)</dd>
+          <dt><kbd>F</kbd> (hold)</dt><dd>Play the chosen Audio FX</dd>
+          <dt><kbd>Q</kbd><kbd>E</kbd></dt><dd>Choose the Audio FX</dd>
+          <dt><kbd>Z</kbd><kbd>C</kbd></dt><dd>Tempo down / up</dd>
+          <dt><kbd>A</kbd><kbd>D</kbd></dt><dd>Previous / next album</dd>
+          <dt><kbd>Tab</kbd></dt><dd>Exit Jam</dd>
+          <dt><kbd>←</kbd><kbd>→</kbd> <kbd>Enter</kbd></dt><dd>Step around the wheel, pick</dd>
           <dt><kbd>P</kbd> <kbd>R</kbd></dt><dd>Play/stop · random mix</dd>
           <dt><kbd>M</kbd> <kbd>Backspace</kbd></dt><dd>Mute / clear current layer</dd>
         </dl>
@@ -161,7 +170,7 @@
           <dt>Left stick + <kbd>A</kbd></dt><dd>Point at a song, pick</dd>
           <dt><kbd>Y</kbd></dt><dd>Next layer</dd>
           <dt><kbd>LB</kbd><kbd>RB</kbd></dt><dd>Albums</dd>
-          <dt><kbd>X</kbd> + right stick</dt><dd>Audio FX</dd>
+          <dt><kbd>X</kbd> (hold) · <kbd>LT</kbd><kbd>RT</kbd></dt><dd>Play / choose Audio FX</dd>
           <dt>D-pad <kbd>▲</kbd><kbd>▼</kbd></dt><dd>Tempo</dd>
           <dt><kbd>B</kbd> · <kbd>Start</kbd></dt><dd>Clear layer · play/stop</dd>
         </dl>

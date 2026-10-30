@@ -18,6 +18,7 @@
   "scripts": {
     "dev": "node serve.mjs",
     "stems": "node tools/build-stems.mjs",
+    "covers": "node tools/build-covers.mjs",
     "deploy": "node tools/deploy.mjs"
   },
   "devDependencies": {

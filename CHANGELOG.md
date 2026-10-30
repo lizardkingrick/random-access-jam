@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+- Background is a plain starry night sky for now, while a new music visualizer is designed. The old
+  stage (dome, light strands, floating objects) and the helmet holograms are gone (the helmet models
+  were game assets). The visualizer hook is documented at the top of js/stage.js
+- Empty slots on the wheel no longer show a faint outline inside their edge
+- Song titles on the wheel always fit inside their segment ("Around The World" ran into the rim on
+  Homework, and two longer titles touched the centre circle)
+- Layout rebuilt to fit any screen: every size scales from one unit, so 4K and ultrawide monitors get a
+  sharp full-size layout and small laptops shrink proportionally. New layouts for portrait tablets and
+  tall monitors (big wheel, controls beside the layer cards) and for phones on their side (the wheel
+  fills the height, albums run down its side). Small text never drops below 10.5px. Checked at 28
+  screen sizes from 320x568 to 3840x2160
+- Keyboard controls now match The Daft Punk Experience on PC: `Space` next layer, hold `F` for
+  Audio FX, `Z` / `C` tempo, `A` / `D` albums, `Tab` exits Jam mode
+- The wheel follows the direction of the mouse instead of exact hovering, keeps the last song
+  highlighted, and shows a white selector arc pointing at it
+- Hold the mouse button, drag through the songs and let go to pick (a plain click still works);
+  letting go inside the hub cancels
+- Songs without a stem for the current layer show as empty slots with no name, like in Fortnite
+- Real album covers on the album tiles and layer badges (`npm run covers` makes small copies from
+  your own full-size images in `../album_cover`; the drawn art is used where there's no cover)
+- Songs that aren't playing in the current layer are a darker blue (names still shown, still pickable);
+  the playing one is bright blue, and the hub shows Fortnite's spacebar icon for switching layers
+- Audio FX: choose one of six effects in the FX strip (or `Q` / `E`), then hold `F` to play it:
+  Stutter (beat repeat of the last eighth note, gated), Low-pass and High-pass sweeps that deepen the
+  longer you hold, Phaser, a tempo-synced Wah, and Tape stop. Replaces the drag-around filter/echo pad
+- The middle of the wheel shows each layer icon once, with the selected one enlarged, and the
+  outer ring around the wheel is gone
+- Jam mode: Enter Jam (or click empty space) captures the mouse so small flicks steer the wheel and
+  letting go of the button picks; hidden where the browser doesn't allow mouse capture
+- The layer buttons, icon, title and key badge in the middle of the wheel no longer overlap
+- The top bar no longer squeezes the version badge under the bar counter on 1280px-wide screens
 - Run it locally on Windows with nothing to install: `start.cmd` starts a small PowerShell
   server that plays the WAV stems straight from your folders (no ffmpeg or Node step)
 - `start.cmd -Lan` serves the app to other devices on your local network (one-time admin
@@ -9,7 +40,6 @@
 - Instrument Guns page on the wheel when the instrument-gun loops are next to the stems:
   backing track, melody gun and rhythm gun as Groove, Lead and Extra. The engine now handles
   loops of any whole number of bars (the Da Funk melody gun is 16 bars)
-- Helmet holograms on the stage when the helmet models are available locally
 - Key lock treats a major key as its relative minor, so A major and F♯m mix untouched
 - Replacing the auto-key song now re-keys the other layers; a random mix keys every layer
   against the final picks and prefers a different song per layer

@@ -11,6 +11,7 @@ import { spawnSync } from 'node:child_process';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = join(ROOT, 'dist');
 const SITE = ['index.html', 'style.css', 'stems.json', '_headers', 'js', 'stems-ogg'];
+const OPTIONAL = ['covers']; // album covers, if you've built them (npm run covers)
 
 for (const f of SITE) {
   if (!existsSync(join(ROOT, f))) {
@@ -21,6 +22,7 @@ for (const f of SITE) {
 rmSync(DIST, { recursive: true, force: true });
 mkdirSync(DIST);
 for (const f of SITE) cpSync(join(ROOT, f), join(DIST, f), { recursive: true });
+for (const f of OPTIONAL) if (existsSync(join(ROOT, f))) cpSync(join(ROOT, f), join(DIST, f), { recursive: true });
 
 const { version } = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
 const preview = process.argv.includes('preview');

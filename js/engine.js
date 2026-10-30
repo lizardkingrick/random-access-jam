@@ -2,7 +2,7 @@
    Every stem is a seamless loop, normally 32 bars / 128 beats. Stems are conformed
    to the master BPM (WSOLA time-stretch) and optionally the master key (resampling
    pitch shift) in a small pool of workers, then looped in sample-accurate sync.
-   Swaps are quantized to the next bar, like the Fortnite remix station. */
+   Swaps are quantized to the next bar. */
 
 import { manifestFromListing } from './manifest.js';
 
@@ -35,7 +35,7 @@ export function tonic(k) {
 export let MANIFEST = {};
 export let LOCAL = null; // the local server's folder listing, if there is one
 export let ctx = null;
-let master, bus, hp, lp, delay, delayFb, delaySend, analyser, mediaDest, glueIn;
+let master, bus, hp, lp, fxDry, wah, wahWet, wahLfo, flDelay, flWet, analyser, mediaDest, glueIn;
 let recorder = null, recChunks = [];
 
 export const state = {
@@ -111,8 +111,10 @@ export async function loadManifest(url) {
 }
 
 // ---------- audio graph ----------
-// layers -> bus -> highpass -> lowpass -> glue -> master -> analyser -> out
-//                               lowpass -> delaySend -> delay(+feedback) -> glue
+// layers -> bus -> highpass -> lowpass -> dry ------------------------> glue -> master -> analyser -> out
+//                               lowpass -> wah (LFO band-pass) -> wet -> glue
+//                               lowpass -> flanger (LFO delay + fb) -> wet -> glue
+// The filters and wet paths sit idle until an Audio FX is held (see fxStart).
 // The glue is gentle bus compression into a peak limiter, so three summed stems don't clip.
 // Both compressors add automatic make-up gain (measured: +2.96 dB and +1.14 dB); the trims
 // take it back out, so material below the thresholds plays at its original level.
@@ -140,9 +142,16 @@ export function ensureCtx() {
   bus = ctx.createGain();
   hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 10;
   lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 22000;
-  delay = ctx.createDelay(2); delay.delayTime.value = 0.75 * 60 / clockBpm;
-  delayFb = ctx.createGain(); delayFb.gain.value = 0.3;
-  delaySend = ctx.createGain(); delaySend.gain.value = 0;
+  fxDry = ctx.createGain();
+  wah = ctx.createBiquadFilter(); wah.type = 'bandpass'; wah.frequency.value = 900; wah.Q.value = 7;
+  wahWet = ctx.createGain(); wahWet.gain.value = 0;
+  wahLfo = ctx.createOscillator(); wahLfo.frequency.value = clockBpm / 60; // one sweep per beat
+  const wahDepth = ctx.createGain(); wahDepth.gain.value = 650;
+  flDelay = ctx.createDelay(0.05); flDelay.delayTime.value = 0.004;
+  const flFb = ctx.createGain(); flFb.gain.value = 0.6;
+  flWet = ctx.createGain(); flWet.gain.value = 0;
+  const flLfo = ctx.createOscillator(); flLfo.frequency.value = 0.25;
+  const flDepth = ctx.createGain(); flDepth.gain.value = 0.003; // 1-7 ms sweep
   analyser = ctx.createAnalyser();
   analyser.fftSize = 512;
   analyser.smoothingTimeConstant = 0.8;
@@ -150,9 +159,11 @@ export function ensureCtx() {
   const glue = buildGlue(ctx);
   glueIn = glue.input;
 
-  bus.connect(hp); hp.connect(lp); lp.connect(glueIn);
-  lp.connect(delaySend); delaySend.connect(delay);
-  delay.connect(delayFb); delayFb.connect(delay); delay.connect(glueIn);
+  bus.connect(hp); hp.connect(lp); lp.connect(fxDry); fxDry.connect(glueIn);
+  lp.connect(wah); wah.connect(wahWet); wahWet.connect(glueIn);
+  wahLfo.connect(wahDepth); wahDepth.connect(wah.frequency); wahLfo.start();
+  lp.connect(flDelay); flDelay.connect(flFb); flFb.connect(flDelay); flDelay.connect(flWet); flWet.connect(glueIn);
+  flLfo.connect(flDepth); flDepth.connect(flDelay.delayTime); flLfo.start();
   glue.output.connect(master);
   glue.output.connect(mediaDest); // recordings are taken before the volume slider
   master.connect(analyser); analyser.connect(ctx.destination);
@@ -409,7 +420,7 @@ function retime(t) {
   const pos = ((bars % cycle) + cycle) % cycle;
   clockBpm = state.bpm;
   state.transportStart = t - pos * barSec();
-  delay.delayTime.setTargetAtTime(0.75 * 60 / clockBpm, ctx.currentTime, 0.05);
+  wahLfo.frequency.setTargetAtTime(clockBpm / 60, ctx.currentTime, 0.05);
 }
 
 // Renders the given layers at the current tempo/key, in parallel; remembers which pick each
@@ -458,7 +469,7 @@ export async function play() {
   const t = ctx.currentTime + 0.12;
   clockBpm = state.bpm;
   state.transportStart = t;
-  delay.delayTime.setValueAtTime(0.75 * 60 / clockBpm, ctx.currentTime);
+  wahLfo.frequency.setValueAtTime(clockBpm / 60, ctx.currentTime);
   for (const id of ready) startSource(id, t, 0);
   state.playing = true;
   changed();
@@ -577,7 +588,7 @@ export async function selectStem(layerId, song, opts = {}) {
         stopSource(layerId); // the old pick was at another tempo; the resync starts this one
       }
     } else if ((wantPlay || !opts.noAutoplay) && gen === playGen && activeLayers().every((id) => !state.layers[id].loading)) {
-      play(); // a pick starts the jam, like Fortnite (unless Stop was pressed while it loaded)
+      play(); // a pick starts the jam (unless Stop was pressed while it loaded)
     }
     // Tempo/key moved while it loaded, or it's ready at a tempo the clock hasn't reached yet:
     // the resync re-renders or retimes and starts it with the others.
@@ -659,28 +670,116 @@ export function setMuted(layerId, muted) {
 }
 
 // ---------- Audio FX (hold) ----------
-// x: -1 (low-pass sweep) .. 0 (dry) .. +1 (high-pass sweep); y: 0..1 echo amount.
-export function setFx(x, y) {
-  if (!ctx) return;
-  const t = ctx.currentTime, k = 0.03;
-  const lpf = x < 0 ? 22000 * Math.pow(200 / 22000, -x) : 22000;
-  const hpf = x > 0 ? 10 * Math.pow(2500 / 10, x) : 10;
-  lp.frequency.setTargetAtTime(lpf, t, k);
-  hp.frequency.setTargetAtTime(hpf, t, k);
-  lp.Q.setTargetAtTime(0.7 + Math.max(0, -x) * 7, t, k);
-  hp.Q.setTargetAtTime(0.7 + Math.max(0, x) * 7, t, k);
-  delaySend.gain.setTargetAtTime(y * 0.7, t, k);
-  delayFb.gain.setTargetAtTime(0.25 + y * 0.45, t, k);
+// Pick one with the FX strip, hold F (or the button) to play it; letting go snaps back.
+export const FX = [
+  { id: 'stutter', label: 'Stutter', desc: 'Repeats the last eighth note in a choppy loop' },
+  { id: 'lowpass', label: 'Low-pass', desc: 'Muffled and underwater: only the bass and kick' },
+  { id: 'highpass', label: 'High-pass', desc: 'Thin and sizzling: the bass sweeps away' },
+  { id: 'phaser', label: 'Phaser', desc: 'A jet-engine swoosh through the melodies' },
+  { id: 'wah', label: 'Wah', desc: 'A resonant band sweeping up and down on the beat' },
+  { id: 'tapestop', label: 'Tape stop', desc: 'Slows to a halt like a vinyl brake' },
+];
+let fxOn = null; // { id, ...state the release needs }
+
+// Freeze a parameter where it is right now so a new ramp starts from there.
+function hold(param, t) {
+  if (param.cancelAndHoldAtTime) param.cancelAndHoldAtTime(t);
+  else { param.cancelScheduledValues(t); param.setValueAtTime(param.value, t); }
 }
-export function releaseFx() {
-  if (!ctx) return;
-  const t = ctx.currentTime;
-  lp.frequency.setTargetAtTime(22000, t, 0.12);
-  hp.frequency.setTargetAtTime(10, t, 0.12);
-  lp.Q.setTargetAtTime(0.7, t, 0.1);
-  hp.Q.setTargetAtTime(0.7, t, 0.1);
-  delaySend.gain.setTargetAtTime(0, t, 0.05); // echo tail rings out
-  delayFb.gain.setTargetAtTime(0.3, t, 0.3);
+const playingLayers = () => activeLayers().filter((id) => state.layers[id].source && state.layers[id].buffer);
+
+export function fxStart(id) {
+  if (!ctx || fxOn) return;
+  const t = ctx.currentTime + 0.005;
+  fxOn = { id };
+  if (id === 'lowpass') { // sweeps down while held, so a longer hold goes deeper
+    hold(lp.frequency, t); lp.frequency.exponentialRampToValueAtTime(260, t + 1.6);
+    hold(lp.Q, t); lp.Q.linearRampToValueAtTime(5, t + 0.4);
+  } else if (id === 'highpass') {
+    hold(hp.frequency, t); hp.frequency.exponentialRampToValueAtTime(2400, t + 1.6);
+    hold(hp.Q, t); hp.Q.linearRampToValueAtTime(4, t + 0.4);
+  } else if (id === 'phaser') {
+    hold(flWet.gain, t); flWet.gain.linearRampToValueAtTime(0.7, t + 0.08);
+    hold(fxDry.gain, t); fxDry.gain.linearRampToValueAtTime(0.7, t + 0.08); // keep the overall level
+  } else if (id === 'wah') {
+    hold(wahWet.gain, t); wahWet.gain.linearRampToValueAtTime(2.2, t + 0.05); // band-pass is quiet: make up level
+    hold(fxDry.gain, t); fxDry.gain.linearRampToValueAtTime(0.12, t + 0.05);
+  } else if (id === 'stutter' && state.playing) {
+    // Beat repeat: from the next 1/16 line, loop the eighth note that just played, gated so
+    // each repeat is chopped. The real sources keep running underneath, muted, so letting go
+    // lands back exactly in time.
+    const bar = barSec(), slice = bar / 8, grid = bar / 16;
+    const t0 = state.transportStart + Math.ceil((ctx.currentTime + 0.03 - state.transportStart) / grid) * grid;
+    fxOn.repeats = [];
+    for (const lid of playingLayers()) {
+      const s = state.layers[lid], dur = s.buffer.duration;
+      const at = (((t0 - state.transportStart) % dur) + dur) % dur;
+      const from = Math.min(Math.max(0, at - slice), dur - slice);
+      const gate = ctx.createGain();
+      gate.gain.setValueAtTime(0, ctx.currentTime);
+      for (let k = 0; k < 96; k++) { // up to 12 bars of repeats; released long before that
+        const a = t0 + k * slice;
+        gate.gain.setValueAtTime(0, a);
+        gate.gain.linearRampToValueAtTime(1, a + 0.004);
+        gate.gain.setValueAtTime(1, a + slice * 0.62);
+        gate.gain.linearRampToValueAtTime(0, a + slice * 0.62 + 0.006);
+      }
+      const src = ctx.createBufferSource();
+      src.buffer = s.buffer; src.loop = true; src.loopStart = from; src.loopEnd = from + slice;
+      src.connect(gate);
+      gate.connect(s.gain);
+      src.start(t0, from);
+      fxOn.repeats.push({ src, gate });
+      s.srcGain.gain.setValueAtTime(1, t0 - 0.004);
+      s.srcGain.gain.linearRampToValueAtTime(0, t0);
+    }
+  } else if (id === 'tapestop' && state.playing) {
+    // Slow every source to a halt; letting go restarts them in sync with the clock.
+    fxOn.layers = playingLayers();
+    for (const lid of fxOn.layers) {
+      const s = state.layers[lid];
+      hold(s.source.playbackRate, t);
+      s.source.playbackRate.linearRampToValueAtTime(0.0001, t + 1.3);
+      s.srcGain.gain.setValueAtTime(1, t + 0.9);
+      s.srcGain.gain.linearRampToValueAtTime(0, t + 1.3);
+    }
+  }
+}
+
+export function fxStop() {
+  if (!ctx || !fxOn) return;
+  const { id } = fxOn, t = ctx.currentTime + 0.005;
+  if (id === 'lowpass') {
+    hold(lp.frequency, t); lp.frequency.exponentialRampToValueAtTime(22000, t + 0.12);
+    hold(lp.Q, t); lp.Q.linearRampToValueAtTime(0.7, t + 0.12);
+  } else if (id === 'highpass') {
+    hold(hp.frequency, t); hp.frequency.exponentialRampToValueAtTime(10, t + 0.12);
+    hold(hp.Q, t); hp.Q.linearRampToValueAtTime(0.7, t + 0.12);
+  } else if (id === 'phaser') {
+    hold(flWet.gain, t); flWet.gain.linearRampToValueAtTime(0, t + 0.15);
+    hold(fxDry.gain, t); fxDry.gain.linearRampToValueAtTime(1, t + 0.15);
+  } else if (id === 'wah') {
+    hold(wahWet.gain, t); wahWet.gain.linearRampToValueAtTime(0, t + 0.06);
+    hold(fxDry.gain, t); fxDry.gain.linearRampToValueAtTime(1, t + 0.06);
+  } else if (id === 'stutter' && fxOn.repeats) {
+    for (const { src, gate } of fxOn.repeats) {
+      hold(gate.gain, t); gate.gain.linearRampToValueAtTime(0, t + 0.01);
+      try { src.stop(t + 0.03); } catch (_) { /* already stopped */ }
+      src.onended = () => { src.disconnect(); gate.disconnect(); };
+    }
+    for (const lid of LAYERS.map((l) => l.id)) {
+      const s = state.layers[lid];
+      if (!s.srcGain) continue;
+      hold(s.srcGain.gain, t); s.srcGain.gain.linearRampToValueAtTime(1, t + 0.01);
+    }
+  } else if (id === 'tapestop' && fxOn.layers) {
+    const at = t + 0.02;
+    for (const lid of fxOn.layers) {
+      const s = state.layers[lid];
+      if (s.buffer && s.source && state.playing) startSource(lid, at, at - state.transportStart);
+    }
+  }
+  fxOn = null;
 }
 
 // ---------- meters (for the visuals) ----------

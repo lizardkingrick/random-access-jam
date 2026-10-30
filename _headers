@@ -3,6 +3,10 @@
 /stems-ogg/*
   Cache-Control: public, max-age=31536000, immutable
 
+# Album covers can be rebuilt under the same name: cache for a day.
+/covers/*
+  Cache-Control: public, max-age=86400
+
 # App shell + manifest: always revalidate so updates show up immediately.
 /*
   X-Content-Type-Options: nosniff
