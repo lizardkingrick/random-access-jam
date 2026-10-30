@@ -3,7 +3,7 @@
 
 :root {
   --bg: #03040c;
-  --panel: rgba(8, 11, 36, 0.78);
+  --panel: rgba(8, 11, 36, 0.88); /* opaque enough to need no backdrop blur (costly over a canvas redrawn every frame) */
   --panel-line: rgba(120, 150, 255, 0.16);
   --seg: #0c1c9e;
   --seg-hover: #1d3fe0;
@@ -105,7 +105,6 @@ body.pad .kc[data-pad="LB"], body.pad .kc[data-pad="RB"] { border-radius: 8px 8p
   border-radius: 999px;
   background: var(--panel);
   border: 1px solid var(--panel-line);
-  backdrop-filter: blur(8px);
 }
 .clock-bar { font: 700 16px/1 var(--ui); letter-spacing: 0.12em; font-variant-numeric: tabular-nums; min-width: 92px; }
 .beat-dots { display: flex; gap: 6px; }
@@ -121,7 +120,6 @@ body.pad .kc[data-pad="LB"], body.pad .kc[data-pad="RB"] { border-radius: 8px 8p
   background: var(--panel);
   border: 1px solid var(--panel-line);
   font: 700 15px/1 var(--ui); letter-spacing: 0.1em; text-transform: uppercase;
-  backdrop-filter: blur(8px);
   transition: background 0.15s, border-color 0.15s, transform 0.1s;
 }
 .tbtn svg { width: 18px; height: 18px; flex: none; }
@@ -217,7 +215,6 @@ body.pad .pill button .kc { background: #0a1033; color: #fff; box-shadow: none; 
   border-radius: 10px;
   background: linear-gradient(90deg, color-mix(in srgb, var(--c) 16%, rgba(6, 9, 28, 0.92)), rgba(6, 9, 28, 0.78));
   border: 1px solid color-mix(in srgb, var(--c) 22%, transparent);
-  backdrop-filter: blur(6px);
   transition: background 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.2s;
   overflow: hidden;
 }
@@ -336,9 +333,8 @@ body.pad .pill button .kc { background: #0a1033; color: #fff; box-shadow: none; 
   display: flex; align-items: center; gap: 8px;
   padding: 8px;
   border-radius: 14px;
-  background: rgba(8, 18, 110, 0.72);
+  background: rgba(8, 18, 110, 0.85);
   border: 1px solid rgba(90, 130, 255, 0.4);
-  backdrop-filter: blur(8px);
   max-width: 100%;
 }
 .album-nav { display: grid; place-items: center; width: 40px; height: 56px; border-radius: 8px; }
@@ -404,7 +400,7 @@ body.pad .pill button .kc { background: #0a1033; color: #fff; box-shadow: none; 
   border: 1px solid rgba(110, 150, 255, 0.4);
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7);
 }
-.help::backdrop { background: rgba(2, 3, 12, 0.6); backdrop-filter: blur(4px); }
+.help::backdrop { background: rgba(2, 3, 12, 0.8); }
 .help h2 { font: 400 34px/1 var(--display); text-transform: uppercase; letter-spacing: 0.03em; }
 .help h3 { font: 700 15px/1 var(--ui); letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
 .steps { margin: 18px 0 22px 20px; display: grid; gap: 8px; font-size: 16px; line-height: 1.4; }
@@ -417,6 +413,16 @@ body.pad .pill button .kc { background: #0a1033; color: #fff; box-shadow: none; 
 .fine { margin-top: 22px; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
 .fine a { color: #8fc8ff; }
 .help-close { margin-top: 20px; height: 46px; padding: 0 28px; border-radius: 999px; background: var(--seg-active); color: #fff; font: 700 18px/1 var(--ui); letter-spacing: 0.12em; text-transform: uppercase; }
+
+/* Shown only when index.html is opened from disk (file://), where modules and audio can't load. */
+.file-note {
+  position: fixed; inset: 0; z-index: 30; display: grid; place-content: center; gap: 14px;
+  padding: 24px; text-align: center; background: var(--bg);
+}
+.file-note[hidden] { display: none; }
+.file-note h2 { font: 400 34px/1 var(--display); text-transform: uppercase; letter-spacing: 0.03em; }
+.file-note p { max-width: 560px; font-size: 16px; line-height: 1.5; color: var(--muted); }
+.file-note b, .file-note code { color: var(--text); }
 
 /* ---------- smaller desktops ---------- */
 @media (max-height: 820px) and (min-width: 961px) {
@@ -454,7 +460,7 @@ body.pad .pill button .kc { background: #0a1033; color: #fff; box-shadow: none; 
   .left { order: 3; justify-content: flex-start; }
   .wheel-wrap { width: min(100%, 540px); min-width: 0; }
   .albums { width: min(100%, 540px); }
-  .album-strip { flex: 1; justify-content: center; }
+  .album-strip { flex: 1; justify-content: safe center; } /* "safe": never clip the first tiles out of scroll reach */
   .controls { justify-content: center; flex-wrap: wrap; }
   .fx-btn { align-self: center; }
   .fx-hint { text-align: center; margin-left: 0; }

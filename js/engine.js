@@ -1,10 +1,12 @@
 /* Audio engine — ported from Dream Chamber Studios Remixed (MuscularCrab).
-   Every stem is a seamless 32-bar / 128-beat loop. Stems are conformed to the
-   master BPM (WSOLA time-stretch) and optionally the master key (resampling
-   pitch shift) in a worker, then looped in sample-accurate sync. Swaps are
-   quantized to the next bar, like the Fortnite remix station. */
+   Every stem is a seamless loop, normally 32 bars / 128 beats. Stems are conformed
+   to the master BPM (WSOLA time-stretch) and optionally the master key (resampling
+   pitch shift) in a small pool of workers, then looped in sample-accurate sync.
+   Swaps are quantized to the next bar, like the Fortnite remix station. */
 
-export const BEATS = 128;
+import { manifestFromListing } from './manifest.js';
+
+export const BEATS = 128; // one transport cycle: the 32-bar loop the bar clock counts
 export const NOTE = { C: 0, 'C#': 1, Db: 1, D: 2, 'D#': 3, Eb: 3, E: 4, F: 5, 'F#': 6, Gb: 6, G: 7, 'G#': 8, Ab: 8, A: 9, 'A#': 10, Bb: 10, B: 11 };
 export const NOTE_NAMES = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
 export const BPM_MIN = 80, BPM_MAX = 140;
@@ -17,14 +19,23 @@ export const LAYERS = [
 ];
 
 export function parseKey(k) {
-  const m = /^([A-G][b#]?)(m?)$/.exec(k);
-  return { root: NOTE[m[1]], minor: !!m[2] };
+  const m = /^([A-G][b#]?)(m?)$/.exec(String(k ?? '').trim());
+  return m ? { root: NOTE[m[1]], minor: !!m[2] } : null; // unknown key: treated as unpitched
 }
 export const prettyKey = (k) => k.replace('b', '♭').replace('#', '♯');
 
+// Key lock matches pitch sets, not just roots: a major key has the same notes as its
+// relative minor (A major = F#m), so majors are matched through that minor. Digital
+// Love (A) over Get Lucky (F#m) then needs no shift instead of clashing a third apart.
+export function tonic(k) {
+  const p = parseKey(k);
+  return p ? (p.minor ? p.root : (p.root + 9) % 12) : null;
+}
+
 export let MANIFEST = {};
+export let LOCAL = null; // the local server's folder listing, if there is one
 export let ctx = null;
-let master, bus, hp, lp, delay, delayFb, delaySend, analyser, mediaDest;
+let master, bus, hp, lp, delay, delayFb, delaySend, analyser, mediaDest, glueIn;
 let recorder = null, recChunks = [];
 
 export const state = {
@@ -33,7 +44,7 @@ export const state = {
   keyLock: true,
   masterKey: 'auto',
   playing: false,
-  transportStart: 0,
+  transportStart: 0, // context time of beat 1 of the running 32-bar cycle
   anchorOrder: [],
   recording: false,
   layers: {},
@@ -41,68 +52,110 @@ export const state = {
 for (const l of LAYERS) {
   state.layers[l.id] = {
     song: null, type: null, volume: 0.85, muted: false,
-    buffer: null, source: null, srcGain: null, gain: null, analyser: null,
-    loading: false, progress: 0, renderTag: 0,
+    buffer: null, bufferKey: null, bufferBpm: 0,
+    source: null, srcGain: null, gain: null, analyser: null,
+    loading: false, syncing: false, progress: 0, renderTag: 0,
   };
 }
+
+// The tempo the running sources were rendered at. state.bpm moves as soon as the user
+// nudges tempo; the clock keeps the old tempo until the re-rendered stems take over.
+let clockBpm = state.bpm;
 
 // ---------- events ----------
 const listeners = { change: [], status: [] };
 export const on = (ev, fn) => listeners[ev].push(fn);
-const emit = (ev, arg) => listeners[ev].forEach((fn) => fn(arg));
+// A throwing UI listener must not leave the engine half-updated (e.g. a layer stuck loading).
+const emit = (ev, arg) => listeners[ev].forEach((fn) => { try { fn(arg); } catch (err) { console.error(err); } });
 const changed = () => emit('change');
 const status = (msg, kind) => emit('status', { msg, kind });
 
 // ---------- helpers ----------
-const targetLen = () => Math.round(BEATS * 60 / state.bpm * ctx.sampleRate);
-export const loopLenSec = () => BEATS * 60 / state.bpm;
-const barLenSec = () => 4 * 60 / state.bpm;
+// One bar in seconds, rounded to whole samples exactly like the rendered loops (loopSamples),
+// so the clock and every looping buffer share one grid.
+const barSec = (bpm = clockBpm) => (ctx ? Math.round(4 * 60 / bpm * ctx.sampleRate) / ctx.sampleRate : 4 * 60 / bpm);
+export const loopLenSec = () => BEATS / 4 * barSec();
 export const activeLayers = () => LAYERS.map((l) => l.id).filter((id) => state.layers[id].song);
 export const stemTypeFor = (layerId, song) =>
   LAYERS.find((l) => l.id === layerId).types.find((t) => MANIFEST[song].stems[t]);
 
 export function masterRoot() {
   if (state.masterKey !== 'auto') return NOTE[state.masterKey];
-  const anchor = state.anchorOrder[0];
-  if (!anchor) return null;
-  return parseKey(MANIFEST[state.layers[anchor].song].key).root;
+  for (const id of state.anchorOrder) { // the first pick with a known key
+    const t = tonic(MANIFEST[state.layers[id].song]?.key);
+    if (t !== null) return t;
+  }
+  return null;
 }
 export function semisFor(songKey) {
   if (!state.keyLock) return 0;
-  const mr = masterRoot();
-  if (mr === null) return 0;
-  return ((mr - parseKey(songKey).root + 18) % 12) - 6; // nearest path, [-6, +5]
+  const mr = masterRoot(), t = tonic(songKey);
+  if (mr === null || t === null) return 0;
+  return ((mr - t + 18) % 12) - 6; // nearest path, [-6, +5]: a tritone goes down
 }
 
+// What a layer's buffer has to be rendered as for the current tempo and key.
+const renderKey = (song, type) => `${song}|${type}|${state.bpm}|${semisFor(MANIFEST[song].key)}|${ctx.sampleRate}`;
+const isCurrent = (s) => !!s.buffer && s.bufferKey === renderKey(s.song, s.type);
+
+// The local server (tools/serve.ps1) lists the stem folders, so the song list comes straight
+// from disk with no build step. The hosted site has no listing and uses the prebuilt stems.json.
 export async function loadManifest(url) {
-  MANIFEST = await (await fetch(url)).json();
+  try {
+    const res = await fetch('__local/files', { cache: 'no-store' });
+    if (res.ok && (res.headers.get('content-type') || '').includes('json')) LOCAL = await res.json();
+  } catch (_) { /* not the local server */ }
+  if (LOCAL && LOCAL.stems && LOCAL.stems.length) MANIFEST = manifestFromListing(LOCAL);
+  else MANIFEST = await (await fetch(url)).json();
   return MANIFEST;
 }
 
 // ---------- audio graph ----------
-// layers -> bus -> highpass -> lowpass -> master -> analyser -> out
-//                               lowpass -> delaySend -> delay(+feedback) -> master
+// layers -> bus -> highpass -> lowpass -> glue -> master -> analyser -> out
+//                               lowpass -> delaySend -> delay(+feedback) -> glue
+// The glue is gentle bus compression into a peak limiter, so three summed stems don't clip.
+// Both compressors add automatic make-up gain (measured: +2.96 dB and +1.14 dB); the trims
+// take it back out, so material below the thresholds plays at its original level.
+function buildGlue(c) {
+  const comp = c.createDynamicsCompressor();
+  comp.threshold.value = -12; comp.knee.value = 8; comp.ratio.value = 2.5;
+  comp.attack.value = 0.01; comp.release.value = 0.2;
+  const trim1 = c.createGain(); trim1.gain.value = 0.711;
+  const limit = c.createDynamicsCompressor();
+  limit.threshold.value = -2; limit.knee.value = 0; limit.ratio.value = 20;
+  limit.attack.value = 0.002; limit.release.value = 0.1;
+  const trim2 = c.createGain(); trim2.gain.value = 0.877;
+  comp.connect(trim1); trim1.connect(limit); limit.connect(trim2);
+  return { input: comp, output: trim2 };
+}
+
 export function ensureCtx() {
-  if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return ctx; }
-  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  if (ctx) { if (ctx.state !== 'running') ctx.resume().catch(() => {}); return ctx; }
+  // Run at the stems' own rate: decoding 44.1 kHz loops into a 48 kHz context rings at both
+  // loop ends (a tick at every wrap). The browser resamples the output stream instead.
+  const AC = window.AudioContext || window.webkitAudioContext;
+  try { ctx = new AC({ sampleRate: 44100, latencyHint: 'interactive' }); } catch (_) { ctx = new AC(); }
   master = ctx.createGain();
   master.gain.value = 0.9;
   bus = ctx.createGain();
   hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 10;
   lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 22000;
-  delay = ctx.createDelay(2); delay.delayTime.value = 0.75 * 60 / state.bpm;
+  delay = ctx.createDelay(2); delay.delayTime.value = 0.75 * 60 / clockBpm;
   delayFb = ctx.createGain(); delayFb.gain.value = 0.3;
   delaySend = ctx.createGain(); delaySend.gain.value = 0;
   analyser = ctx.createAnalyser();
   analyser.fftSize = 512;
   analyser.smoothingTimeConstant = 0.8;
   mediaDest = ctx.createMediaStreamDestination();
+  const glue = buildGlue(ctx);
+  glueIn = glue.input;
 
-  bus.connect(hp); hp.connect(lp); lp.connect(master);
+  bus.connect(hp); hp.connect(lp); lp.connect(glueIn);
   lp.connect(delaySend); delaySend.connect(delay);
-  delay.connect(delayFb); delayFb.connect(delay); delay.connect(master);
+  delay.connect(delayFb); delayFb.connect(delay); delay.connect(glueIn);
+  glue.output.connect(master);
+  glue.output.connect(mediaDest); // recordings are taken before the volume slider
   master.connect(analyser); analyser.connect(ctx.destination);
-  master.connect(mediaDest);
 
   for (const l of LAYERS) {
     const s = state.layers[l.id];
@@ -116,43 +169,93 @@ export function ensureCtx() {
   return ctx;
 }
 
-// ---------- stretch worker ----------
-const worker = new Worker(new URL('./stretch-worker.js', import.meta.url));
-let workerId = 0;
-const workerJobs = new Map();
-worker.onmessage = (e) => {
-  const job = workerJobs.get(e.data.id);
-  if (!job) return;
-  workerJobs.delete(e.data.id);
-  if (e.data.error) job.reject(new Error(e.data.error));
-  else job.resolve(e.data.channels);
-};
-function stretchInWorker(channels, sampleRate, len, pitchRatio) {
+// ---------- stretch workers ----------
+// A few workers so a tempo or key change re-renders the layers in parallel. Workers start
+// on first use; each takes one job at a time from a FIFO queue.
+// A stretch job briefly holds up to ~150 MB, so low-memory devices get two workers at most.
+const POOL_SIZE = Math.max(1, Math.min((navigator.deviceMemory || 8) <= 4 ? 2 : 3, (navigator.hardwareConcurrency || 2) - 1));
+const pool = []; // { worker, job }
+const jobQueue = [];
+let jobSeq = 0;
+
+function spawnWorker() {
+  const slot = { worker: new Worker(new URL('./stretch-worker.js', import.meta.url)), job: null };
+  slot.worker.onmessage = (e) => {
+    const job = slot.job;
+    slot.job = null;
+    if (job && job.id === e.data.id) {
+      if (e.data.error) job.reject(new Error(e.data.error));
+      else job.resolve(e.data.channels);
+    }
+    pumpJobs();
+  };
+  slot.worker.onerror = (e) => { // the script itself failed: drop this worker
+    e.preventDefault();
+    const job = slot.job;
+    slot.job = null;
+    slot.worker.terminate();
+    pool.splice(pool.indexOf(slot), 1);
+    if (job) job.reject(new Error(e.message || 'stretch worker failed'));
+    pumpJobs();
+  };
+  pool.push(slot);
+  return slot;
+}
+
+function pumpJobs() {
+  while (jobQueue.length) {
+    const slot = pool.find((s) => !s.job) || (pool.length < POOL_SIZE ? spawnWorker() : null);
+    if (!slot) return;
+    const job = jobQueue.shift();
+    slot.job = job;
+    slot.worker.postMessage(job.msg, job.msg.channels.map((c) => c.buffer));
+  }
+}
+
+function stretchInWorker(channels, sampleRate, targetLen, pitchRatio) {
   return new Promise((resolve, reject) => {
-    const id = ++workerId;
-    workerJobs.set(id, { resolve, reject });
-    worker.postMessage({ id, channels, sampleRate, targetLen: len, pitchRatio },
-      channels.map((c) => c.buffer));
+    const id = ++jobSeq;
+    jobQueue.push({ id, msg: { id, channels, sampleRate, targetLen, pitchRatio }, resolve, reject });
+    pumpJobs();
   });
 }
 
 // ---------- buffers ----------
-const originalCache = new Map(); // wav path -> Promise<AudioBuffer>
-const renderCache = new Map();   // render key -> AudioBuffer (capped)
+// Decoded originals are big (about 23 MB per minute of stereo at 48 kHz) and hover-prefetch
+// would otherwise keep every stem ever pointed at, so both caches keep only the most
+// recently used few. Playing layers hold their own buffers, so evicting is always safe.
+const ORIGINALS_MAX = 6, RENDERS_MAX = 8;
+const originals = new Map(); // stem id -> { promise, listeners }
+const renders = new Map();   // render key -> Promise<AudioBuffer>
+function lruGet(map, key) {
+  const v = map.get(key);
+  if (v !== undefined) { map.delete(key); map.set(key, v); }
+  return v;
+}
+function lruSet(map, key, value, max) {
+  map.delete(key);
+  map.set(key, value);
+  while (map.size > max) map.delete(map.keys().next().value);
+}
+
 const encodePath = (p) => encodeURI(p).replace(/#/g, '%23');
 
 async function fetchBytes(url, onProgress) {
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`fetch failed: ${url}`);
+  if (!res.ok) throw new Error(`fetch failed (${res.status}): ${url}`);
   const total = Number(res.headers.get('content-length')) || 0;
-  if (!res.body || !total || !onProgress) return res.arrayBuffer();
+  if (!res.body || !total) return res.arrayBuffer();
   const reader = res.body.getReader();
   const out = new Uint8Array(total);
   let got = 0;
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
-    if (got + value.length > out.length) return new Blob([out.subarray(0, got), value]).arrayBuffer(); // length lied (gzip)
+    if (got + value.length > out.length) { // length lied (gzip): fall back to collecting the rest
+      const rest = [out.subarray(0, got), value];
+      for (;;) { const r = await reader.read(); if (r.done) break; rest.push(r.value); }
+      return new Blob(rest).arrayBuffer();
+    }
     out.set(value, got);
     got += value.length;
     onProgress(got / total);
@@ -160,23 +263,39 @@ async function fetchBytes(url, onProgress) {
   return out.buffer.slice(0, got);
 }
 
-// Compressed Ogg copy first (page-relative, works at any mount point); the
-// WAV master in ../Stems is only a local-dev fallback.
+// A local listing gives each stem's URL (`src`). Otherwise: the compressed Ogg copy
+// (page-relative, works at any mount point), then the WAV master in ../Stems (legacy local dev).
+let oggsMissing = false;
 function getOriginal(info, type, onProgress) {
-  const wavPath = info.stems[type];
-  if (originalCache.has(wavPath)) return originalCache.get(wavPath);
-  ensureCtx();
-  const p = (async () => {
-    const ogg = info.oggs && info.oggs[type];
-    if (ogg) {
-      try { return await ctx.decodeAudioData(await fetchBytes(encodePath(ogg), onProgress)); }
-      catch (err) { console.warn('ogg failed, falling back to wav:', ogg, err); }
-    }
-    return ctx.decodeAudioData(await fetchBytes('../' + encodePath(wavPath), onProgress));
-  })();
-  originalCache.set(wavPath, p);
-  p.catch(() => originalCache.delete(wavPath));
-  return p;
+  const id = info.stems[type];
+  let entry = lruGet(originals, id);
+  if (!entry) {
+    ensureCtx();
+    entry = { listeners: new Set() };
+    const progress = (p) => entry.listeners.forEach((fn) => fn(p));
+    // Lossy codecs pad a few ms that must be trimmed off the loop; WAVs are the loop exactly.
+    const load = async (path) => {
+      const buf = await ctx.decodeAudioData(await fetchBytes(encodePath(path), progress));
+      buf.lossy = !/\.wav$/i.test(path);
+      return buf;
+    };
+    entry.promise = (async () => {
+      if (info.src && info.src[type]) return load(info.src[type]);
+      const ogg = info.oggs && info.oggs[type];
+      if (ogg && !oggsMissing) {
+        try { return await load(ogg); }
+        catch (err) {
+          if (/\(404\)/.test(err.message)) oggsMissing = true; // no compressed set here: go straight to WAVs
+          console.warn('ogg failed, falling back to wav:', ogg, err);
+        }
+      }
+      return load('../' + id);
+    })();
+    entry.promise.then(() => entry.listeners.clear(), () => { entry.listeners.clear(); originals.delete(id); });
+    lruSet(originals, id, entry, ORIGINALS_MAX);
+  }
+  if (onProgress) entry.listeners.add(onProgress);
+  return entry.promise;
 }
 
 // Warm the cache (e.g. on hover) so a pick feels instant.
@@ -185,32 +304,53 @@ export function prefetch(layerId, song) {
   if (type) getOriginal(MANIFEST[song], type).catch(() => {});
 }
 
-async function renderStem(layerId, onProgress) {
-  const s = state.layers[layerId];
-  const info = MANIFEST[s.song];
-  const semis = semisFor(info.key);
-  const key = `${s.song}|${s.type}|${state.bpm}|${semis}|${ctx.sampleRate}`;
-  if (renderCache.has(key)) return renderCache.get(key);
+// How many beats a file loops over (the nearest whole number of bars at the BPM in its name:
+// 128 for stems, 64 for the Da Funk melody gun) and how many of its samples form the loop.
+// A WAV is the loop exactly, even when it's a few samples off the nominal length (the gun
+// loops; the HBFS guns are really ~123.5 BPM). A lossy decode is trimmed back to the ideal
+// length when it only overshoots by codec padding.
+export function loopShape(length, bpm, sampleRate, lossy = false) {
+  const beats = Math.max(4, Math.round(length / sampleRate * bpm / 60 / 4) * 4);
+  const ideal = Math.round(beats * 60 / bpm * sampleRate);
+  const padded = lossy && length > ideal && length - ideal <= sampleRate * 0.05;
+  return { beats, inLen: padded ? ideal : length };
+}
 
-  const orig = await getOriginal(info, s.type, onProgress);
-  // Lossy decodes can pad a few ms; trim to the exact 128-beat loop.
-  const ideal = Math.round(BEATS * 60 / info.bpm * ctx.sampleRate);
-  const inLen = Math.min(orig.length, ideal);
-  const chans = [0, 1].map((c) => orig.getChannelData(Math.min(c, orig.numberOfChannels - 1)).slice(0, inLen));
-  const len = targetLen();
-  const out = await stretchInWorker(chans, ctx.sampleRate, len, Math.pow(2, semis / 12));
-  const buf = ctx.createBuffer(2, len, ctx.sampleRate);
-  buf.copyToChannel(out[0], 0);
-  buf.copyToChannel(out[1], 1);
-  if (renderCache.size > 12) renderCache.delete(renderCache.keys().next().value);
-  renderCache.set(key, buf);
-  return buf;
+// Rendered loops are whole numbers of one rounded bar, so a 16-bar loop playing twice stays
+// sample-locked to a 32-bar one instead of drifting by a rounding sample every cycle.
+const loopSamples = (beats, bpm, sr) => Math.round(4 * 60 / bpm * sr) * (beats / 4);
+
+// Renders a stem at the current tempo and key. Identical requests share one render.
+function render(song, type, onProgress) {
+  const info = MANIFEST[song];
+  const semis = semisFor(info.key), bpm = state.bpm, sr = ctx.sampleRate;
+  const key = renderKey(song, type);
+  let promise = lruGet(renders, key);
+  if (!promise) {
+    promise = (async () => {
+      const orig = await getOriginal(info, type, onProgress);
+      const { beats, inLen } = loopShape(orig.length, info.bpm, sr, orig.lossy);
+      const chans = [0, 1].map((c) => orig.getChannelData(Math.min(c, orig.numberOfChannels - 1)).slice(0, inLen));
+      const len = loopSamples(beats, bpm, sr);
+      const out = await stretchInWorker(chans, sr, len, Math.pow(2, semis / 12));
+      const buf = ctx.createBuffer(2, len, sr);
+      buf.copyToChannel(out[0], 0);
+      buf.copyToChannel(out[1], 1);
+      return buf;
+    })();
+    promise.catch(() => renders.delete(key));
+    lruSet(renders, key, promise, RENDERS_MAX);
+  } else if (onProgress) {
+    onProgress(1);
+  }
+  return { key, bpm, promise };
 }
 
 // ---------- transport ----------
+// The next bar line, with a little lead so a swap is never scheduled in the past.
 function nextBarTime() {
-  const bar = barLenSec();
-  const elapsed = ctx.currentTime - state.transportStart;
+  const bar = barSec();
+  const elapsed = ctx.currentTime + 0.02 - state.transportStart;
   return state.transportStart + (Math.floor(elapsed / bar) + 1) * bar;
 }
 
@@ -227,78 +367,173 @@ function startSource(layerId, when, offset) {
   src.connect(sg);
   sg.connect(s.gain);
   src.start(when, ((offset % s.buffer.duration) + s.buffer.duration) % s.buffer.duration);
+  src.onended = () => { src.disconnect(); sg.disconnect(); };
   s.source = src;
   s.srcGain = sg;
+  s.startAt = when;
 }
 
 function stopSource(layerId, when) {
   const s = state.layers[layerId];
-  if (!s.source) return;
   const t = Math.max(when ?? ctx.currentTime, ctx.currentTime);
+  // An outgoing source from an earlier bar-quantized swap may still be due to play past t
+  // (Stop pressed, or a tempo restart, before that bar line): cut it at t as well.
+  s.tails = (s.tails || []).filter((x) => x.stopAt > ctx.currentTime);
+  for (const x of s.tails) {
+    if (x.stopAt <= t + 0.05) continue;
+    try {
+      x.sg.gain.cancelScheduledValues(t);
+      x.sg.gain.setTargetAtTime(0, t, 0.01);
+      x.src.stop(t + 0.06);
+      x.stopAt = t + 0.06;
+    } catch (_) { /* already stopped */ }
+  }
+  if (!s.source) return;
   try {
-    s.srcGain.gain.setValueAtTime(1, t);
-    s.srcGain.gain.linearRampToValueAtTime(0, t + 0.03);
-    s.source.stop(t + 0.05);
+    if (t <= s.startAt) {
+      s.source.stop(); // scheduled but not started yet: stopping before its start, it never sounds
+    } else {
+      s.srcGain.gain.setValueAtTime(1, t);
+      s.srcGain.gain.linearRampToValueAtTime(0, t + 0.03);
+      s.source.stop(t + 0.05);
+      s.tails.push({ src: s.source, sg: s.srcGain, stopAt: t + 0.05 });
+    }
   } catch (_) { /* already stopped */ }
   s.source = null;
   s.srcGain = null;
 }
 
+// Moves the clock to the current tempo at time t, keeping the position in the 32-bar cycle.
+function retime(t) {
+  const bars = (t - state.transportStart) / barSec(), cycle = BEATS / 4;
+  const pos = ((bars % cycle) + cycle) % cycle;
+  clockBpm = state.bpm;
+  state.transportStart = t - pos * barSec();
+  delay.delayTime.setTargetAtTime(0.75 * 60 / clockBpm, ctx.currentTime, 0.05);
+}
+
+// Renders the given layers at the current tempo/key, in parallel; remembers which pick each
+// render was for, so a layer re-picked meanwhile can ignore it.
+async function renderLayers(ids) {
+  const jobs = ids.map((id) => {
+    const s = state.layers[id];
+    return { id, song: s.song, tag: s.renderTag, job: render(s.song, s.type) };
+  });
+  const done = await Promise.allSettled(jobs.map((j) => j.job.promise));
+  return jobs.map((j, k) => ({ ...j, result: done[k] }));
+}
+
+let playGen = 0; // bumped by stop(), so work started before a stop doesn't start playback
+let wantPlay = false; // Play was pressed while stems were still loading
+export const playPending = () => wantPlay;
 export async function play() {
   ensureCtx();
-  const ids = activeLayers().filter((id) => !state.layers[id].loading || state.layers[id].buffer);
-  if (!ids.length) { status('Pick a stem from the wheel to start the jam'); return; }
-  for (const id of ids) if (!state.layers[id].buffer) state.layers[id].buffer = await renderStem(id);
+  if (state.playing) return;
+  if (!activeLayers().length) { status('Pick a stem from the wheel to start the jam'); return; }
+  if (activeLayers().some((id) => state.layers[id].loading)) {
+    wantPlay = true; // the last pick to finish loading starts everything together
+    status('Starting when the stems are ready…');
+    return;
+  }
+  wantPlay = false;
+  const gen = playGen;
+  // Bring stale layers up to date; if tempo or key moves again while they render, go again.
+  for (let pass = 0; pass < 4; pass++) {
+    const stale = activeLayers().filter((id) => !state.layers[id].loading && !isCurrent(state.layers[id]));
+    if (!stale.length) break;
+    for (const id of stale) state.layers[id].syncing = true;
+    changed();
+    const results = await renderLayers(stale);
+    for (const r of results) {
+      const s = state.layers[r.id];
+      s.syncing = false;
+      if (r.result.status === 'fulfilled' && s.song === r.song && s.renderTag === r.tag) {
+        s.buffer = r.result.value; s.bufferKey = r.job.key; s.bufferBpm = r.job.bpm;
+      }
+    }
+    if (gen !== playGen || state.playing) { changed(); return; } // stopped or restarted meanwhile
+  }
+  const ready = activeLayers().filter((id) => isCurrent(state.layers[id]) && !state.layers[id].loading);
+  if (!ready.length) { changed(); return; }
   const t = ctx.currentTime + 0.12;
+  clockBpm = state.bpm;
   state.transportStart = t;
-  for (const id of ids) startSource(id, t, 0);
+  delay.delayTime.setValueAtTime(0.75 * 60 / clockBpm, ctx.currentTime);
+  for (const id of ready) startSource(id, t, 0);
   state.playing = true;
   changed();
 }
 
 export function stop() {
+  playGen++;
+  wantPlay = false;
   if (!ctx) return;
-  for (const id of activeLayers()) stopSource(id);
+  for (const id of LAYERS.map((l) => l.id)) stopSource(id);
   state.playing = false;
   changed();
 }
 
 export const togglePlay = () => (state.playing ? stop() : play());
 
-// Re-render every active stem (BPM or key changed) and continue from the same
-// point in the loop so the groove doesn't jump back to bar 1.
-let rebuildToken = 0;
-export async function rebuildAll() {
-  if (!ctx) return;
-  const token = ++rebuildToken;
-  const ids = activeLayers().filter((id) => state.layers[id].buffer || state.layers[id].loading);
-  if (!ids.length) return;
-  for (const id of ids) state.layers[id].loading = true;
-  changed();
-  try {
-    const bufs = {};
-    for (const id of ids) bufs[id] = await renderStem(id);
-    if (token !== rebuildToken) return;
-    let phase = 0;
-    if (state.playing && ids.some((id) => state.layers[id].buffer)) {
-      const old = ids.map((id) => state.layers[id].buffer).find(Boolean);
-      phase = ((ctx.currentTime - state.transportStart) % old.duration) / old.duration;
-    }
-    for (const id of ids) { state.layers[id].buffer = bufs[id]; state.layers[id].loading = false; }
-    delay.delayTime.setTargetAtTime(0.75 * 60 / state.bpm, ctx.currentTime, 0.05);
-    if (state.playing) {
-      const t = ctx.currentTime + 0.08;
-      const offset = phase * loopLenSec();
-      state.transportStart = t - offset;
-      for (const id of ids) startSource(id, t, offset);
-    }
+// Re-renders every layer that no longer matches the tempo/key, then swaps them in: a tempo
+// change restarts everything together, in phase; a key change swaps on the next bar. Layers
+// still loading a new pick are left to selectStem. Calls while running coalesce into one
+// more pass.
+let resyncRun = null, resyncAgain = false;
+export function rebuildAll() {
+  if (!ctx) return Promise.resolve();
+  if (resyncRun) { resyncAgain = true; return resyncRun; }
+  resyncRun = (async () => {
+    try {
+      do { resyncAgain = false; await resyncOnce(); } while (resyncAgain);
+    } finally { resyncRun = null; }
+  })();
+  return resyncRun;
+}
+
+async function resyncOnce() {
+  const stale = activeLayers().filter((id) => { const s = state.layers[id]; return s.buffer && !s.loading && !isCurrent(s); });
+  const fresh = [];
+  if (stale.length) {
+    for (const id of stale) state.layers[id].syncing = true;
     changed();
-  } catch (err) {
-    console.error(err);
-    for (const id of ids) state.layers[id].loading = false;
-    status('Could not re-sync stems — see console', 'error');
-    changed();
+    const results = await renderLayers(stale);
+    let failed = false;
+    for (const r of results) {
+      const s = state.layers[r.id];
+      s.syncing = false;
+      if (s.song !== r.song || s.renderTag !== r.tag || s.loading) continue; // re-picked meanwhile
+      if (r.result.status !== 'fulfilled') { failed = true; console.error(r.result.reason); continue; }
+      if (r.job.key !== renderKey(s.song, s.type)) { resyncAgain = true; continue; } // settings moved on
+      fresh.push(r);
+    }
+    if (failed) status('Could not re-sync stems — see console', 'error');
+    if (resyncAgain) { changed(); return; } // nudged again while rendering: wait for the next pass
+    for (const r of fresh) {
+      const s = state.layers[r.id];
+      s.buffer = r.result.value; s.bufferKey = r.job.key; s.bufferBpm = r.job.bpm;
+    }
   }
+
+  // The clock follows the tempo once at least one layer is ready at it (a layer that failed
+  // to re-render drops out rather than playing out of time).
+  const tempoMoves = clockBpm !== state.bpm && activeLayers().some((id) => isCurrent(state.layers[id]));
+  if (!state.playing) {
+    clockBpm = state.bpm;
+  } else if (tempoMoves) {
+    // Everything restarts together at the new tempo, from the same point in the loop.
+    const t = ctx.currentTime + 0.08;
+    retime(t);
+    for (const id of activeLayers()) {
+      const s = state.layers[id];
+      if (s.buffer && s.bufferBpm === clockBpm && !s.loading) startSource(id, t, t - state.transportStart);
+      else stopSource(id, t); // still loading a new pick at the old tempo: it joins when ready
+    }
+  } else if (fresh.length) {
+    const t = nextBarTime();
+    for (const r of fresh) startSource(r.id, t, t - state.transportStart);
+  }
+  changed();
 }
 
 // ---------- layer selection ----------
@@ -310,35 +545,59 @@ export async function selectStem(layerId, song, opts = {}) {
   if (!type) return;
 
   const firstStem = activeLayers().length === 0;
-  if (firstStem && !state.tempoTouched && !opts.keepTempo) state.bpm = MANIFEST[song].bpm;
+  if (firstStem && !state.tempoTouched && !opts.keepTempo && !state.playing) state.bpm = Math.round(MANIFEST[song].bpm);
+  const rootBefore = masterRoot();
+  const gen = playGen;
   s.song = song;
   s.type = type;
   s.loading = true;
   s.progress = 0;
   if (!state.anchorOrder.includes(layerId)) state.anchorOrder.push(layerId);
   changed();
+  // A new song on the auto-key anchor moves the master key: re-key the other layers (after
+  // this task, so a random pick of every layer re-keys once, against the final songs).
+  if (rootBefore !== null && masterRoot() !== rootBefore) queueMicrotask(rebuildAll);
 
   const tag = ++s.renderTag;
   try {
-    const buf = await renderStem(layerId, (p) => { s.progress = p; changed(); });
+    // Progress arrives per network chunk; re-render the UI in 2% steps, not hundreds of times.
+    const job = render(song, type, (p) => {
+      if (s.renderTag === tag && (p >= 1 || p - s.progress >= 0.02)) { s.progress = p; changed(); }
+    });
+    const buf = await job.promise;
     if (s.renderTag !== tag || s.song !== song) return;
-    s.buffer = buf;
+    s.buffer = buf; s.bufferKey = job.key; s.bufferBpm = job.bpm;
     s.loading = false;
+    s.progress = 1;
     if (state.playing) {
-      const t = nextBarTime();
-      startSource(layerId, t, t - state.transportStart);
-    } else if (!opts.noAutoplay && activeLayers().every((id) => !state.layers[id].loading)) {
-      play(); // first pick starts the jam, like Fortnite
+      if (job.bpm === clockBpm) {
+        const t = nextBarTime();
+        startSource(layerId, t, t - state.transportStart);
+      } else {
+        stopSource(layerId); // the old pick was at another tempo; the resync starts this one
+      }
+    } else if ((wantPlay || !opts.noAutoplay) && gen === playGen && activeLayers().every((id) => !state.layers[id].loading)) {
+      play(); // a pick starts the jam, like Fortnite (unless Stop was pressed while it loaded)
     }
+    // Tempo/key moved while it loaded, or it's ready at a tempo the clock hasn't reached yet:
+    // the resync re-renders or retimes and starts it with the others.
+    if (!isCurrent(s) || (state.playing && job.bpm !== clockBpm)) rebuildAll();
     changed();
   } catch (err) {
     if (s.renderTag !== tag) return;
     console.error(err);
     s.loading = false;
-    s.song = s.type = s.buffer = null;
+    stopSource(layerId);
+    const rootBefore = masterRoot();
+    s.song = s.type = s.buffer = s.bufferKey = null;
     state.anchorOrder = state.anchorOrder.filter((x) => x !== layerId);
+    if (!activeLayers().length) { state.playing = false; wantPlay = false; }
     status(`Couldn't load ${song} — is the stem file there?`, 'error');
     changed();
+    if (masterRoot() !== rootBefore && masterRoot() !== null) rebuildAll(); // the failed pick was the key anchor
+    // The others may have been waiting on this one to start (Play pressed during loading).
+    if (!state.playing && (wantPlay || !opts.noAutoplay) && gen === playGen && activeLayers().length
+      && activeLayers().every((id) => !state.layers[id].loading)) play();
   }
 }
 
@@ -347,20 +606,28 @@ export function clearLayer(layerId) {
   if (!s.song) return;
   if (ctx) stopSource(layerId, state.playing ? nextBarTime() : undefined);
   s.renderTag++;
-  s.song = s.type = s.buffer = null;
-  s.loading = false;
-  const wasAnchor = state.anchorOrder[0] === layerId;
+  const rootBefore = masterRoot();
+  s.song = s.type = s.buffer = s.bufferKey = null;
+  s.loading = s.syncing = false;
   state.anchorOrder = state.anchorOrder.filter((x) => x !== layerId);
-  if (!activeLayers().length) state.playing = false;
+  if (!activeLayers().length) { state.playing = false; playGen++; wantPlay = false; }
   changed();
-  if (wasAnchor && state.keyLock && state.masterKey === 'auto') rebuildAll();
+  if (masterRoot() !== rootBefore && masterRoot() !== null) rebuildAll();
 }
 
 export function randomize() {
   ensureCtx();
-  for (const l of LAYERS) {
-    const options = Object.keys(MANIFEST).filter((song) => stemTypeFor(l.id, song) && song !== state.layers[l.id].song);
-    selectStem(l.id, options[Math.floor(Math.random() * options.length)], { force: true });
+  // The auto-key anchor goes first, so the others are keyed against its new song.
+  const order = [...new Set([...state.anchorOrder, ...LAYERS.map((l) => l.id)])];
+  const taken = new Set(); // one song per layer when there's a choice: the point is to mix tracks
+  for (const id of order) {
+    const options = Object.keys(MANIFEST).filter((song) => stemTypeFor(id, song) && song !== state.layers[id].song);
+    const fresh = options.filter((song) => !taken.has(song));
+    const pool = fresh.length ? fresh : options;
+    if (!pool.length) continue;
+    const song = pool[Math.floor(Math.random() * pool.length)];
+    taken.add(song);
+    selectStem(id, song, { force: true });
   }
 }
 
@@ -419,32 +686,40 @@ export function releaseFx() {
 // ---------- meters (for the visuals) ----------
 const meterBuf = new Float32Array(256);
 let spectrum = null;
+const meterOut = { groove: 0, lead: 0, texture: 0, bass: 0, mid: 0, high: 0, beat: 0, bar: 0, beatIndex: -1, spectrum: null };
 export function meters() {
-  const out = { groove: 0, lead: 0, texture: 0, bass: 0, mid: 0, high: 0, beat: 0, bar: 0, beatIndex: -1 };
-  if (!ctx) return out;
+  meterOut.groove = meterOut.lead = meterOut.texture = meterOut.bass = meterOut.mid = meterOut.high = meterOut.beat = meterOut.bar = 0;
+  meterOut.beatIndex = -1;
+  if (!ctx) return meterOut;
   for (const l of LAYERS) {
     const s = state.layers[l.id];
     if (!s.source) continue;
     s.analyser.getFloatTimeDomainData(meterBuf);
     let sum = 0;
     for (let i = 0; i < meterBuf.length; i++) sum += meterBuf[i] * meterBuf[i];
-    out[l.id] = Math.min(1, Math.sqrt(sum / meterBuf.length) * 3.2);
+    meterOut[l.id] = Math.min(1, Math.sqrt(sum / meterBuf.length) * 3.2);
   }
   spectrum ??= new Uint8Array(analyser.frequencyBinCount);
   analyser.getByteFrequencyData(spectrum);
   const band = (a, b) => { let s = 0; for (let i = a; i < b; i++) s += spectrum[i]; return s / (b - a) / 255; };
-  out.bass = band(1, 6); out.mid = band(6, 40); out.high = band(40, 160);
-  out.spectrum = spectrum;
+  meterOut.bass = band(1, 6); meterOut.mid = band(6, 40); meterOut.high = band(40, 160);
+  meterOut.spectrum = spectrum;
   if (state.playing) {
-    const elapsed = ctx.currentTime - state.transportStart;
+    // The visuals follow what is audible now, not what the audio thread is rendering: on
+    // Bluetooth or HDMI output that difference is 100-300 ms and the beat flashes run early.
+    const ts = ctx.getOutputTimestamp ? ctx.getOutputTimestamp() : null;
+    const heard = ts && ts.contextTime
+      ? ts.contextTime + (performance.now() - ts.performanceTime) / 1000
+      : ctx.currentTime - (ctx.outputLatency || 0) - (ctx.baseLatency || 0);
+    const elapsed = heard - state.transportStart;
     if (elapsed >= 0) {
-      const beats = elapsed / (60 / state.bpm);
-      out.beatIndex = Math.floor(beats) % BEATS;
-      out.beat = beats % 1;
-      out.bar = (beats / 4) % 32;
+      const beats = elapsed / barSec() * 4;
+      meterOut.beatIndex = Math.floor(beats) % BEATS;
+      meterOut.beat = beats % 1;
+      meterOut.bar = (beats / 4) % 32;
     }
   }
-  return out;
+  return meterOut;
 }
 
 // ---------- record & export ----------
@@ -468,20 +743,36 @@ export function toggleRecord(download) {
   changed();
 }
 
-export function exportLoopWav() {
-  const ids = activeLayers().filter((id) => state.layers[id].buffer && !state.layers[id].muted);
+// One full 32-bar cycle through the same glue as the live mix. It renders two cycles and keeps
+// the second, so the compressors are already settled and the file loops without a bump.
+export async function exportLoopWav() {
+  const ids = activeLayers().filter((id) => {
+    const s = state.layers[id];
+    return s.buffer && !s.muted && s.bufferBpm === clockBpm;
+  });
   if (!ids.length) { status('Nothing to export — pick some stems first'); return null; }
-  const len = state.layers[ids[0]].buffer.length;
-  const mix = [new Float32Array(len), new Float32Array(len)];
+  const sr = ctx.sampleRate;
+  const len = loopSamples(BEATS, clockBpm, sr);
+  const look = 2 * Math.floor(0.006 * sr); // two compressors' look-ahead (measured: 528 samples at 44.1k): bar 1 at sample 0
+  const off = new OfflineAudioContext(2, len * 2 + look, sr);
+  const glue = buildGlue(off);
+  const out = off.createGain();
+  out.gain.value = 0.9; // the default master level
+  glue.output.connect(out);
+  out.connect(off.destination);
   for (const id of ids) {
     const s = state.layers[id];
-    const v = s.volume * 0.9;
-    for (let c = 0; c < 2; c++) {
-      const data = s.buffer.getChannelData(c), m = mix[c];
-      for (let i = 0; i < len; i++) m[i] += data[i] * v;
-    }
+    const src = off.createBufferSource();
+    src.buffer = s.buffer;
+    src.loop = true;
+    const g = off.createGain();
+    g.gain.value = s.volume;
+    src.connect(g);
+    g.connect(glue.input);
+    src.start(0);
   }
-  return encodeWav(mix, ctx.sampleRate);
+  const rendered = await off.startRendering();
+  return encodeWav([0, 1].map((c) => rendered.getChannelData(c).subarray(len + look)), sr);
 }
 
 function encodeWav(channels, sampleRate) {

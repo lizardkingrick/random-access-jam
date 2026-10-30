@@ -13,6 +13,13 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M8 30 30 8M14 62 62 14M44 70 70 44' stroke='%232f8cff' stroke-width='14' stroke-linecap='round'/></svg>">
 </head>
 <body>
+<div class="file-note" id="fileNote" hidden>
+  <h2>Start the local server first</h2>
+  <p>Browsers block audio and scripts on pages opened straight from disk. On Windows, double-click
+    <b>start.cmd</b> next to this file: it starts a tiny local server (nothing to install) and opens the app.
+    On a Mac or Linux, run <code>npm run dev</code>.</p>
+</div>
+<script>if (location.protocol === 'file:') document.getElementById('fileNote').hidden = false;</script>
 <canvas id="stage" aria-hidden="true"></canvas>
 <div class="scrim" aria-hidden="true"></div>
 

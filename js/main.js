@@ -3,6 +3,7 @@ import { state, LAYERS, NOTE, NOTE_NAMES, prettyKey } from './engine.js';
 import { ALBUMS, albumById, songsForAlbum, displayName, albumArtUnique, LAYER_ICONS } from './catalog.js';
 import { createWheel } from './wheel.js';
 import { createStage } from './stage.js';
+import { loadHelmets } from './helmets.js';
 import { VERSION, VERSION_LABEL } from './version.js';
 
 const $ = (s, root = document) => root.querySelector(s);
@@ -80,17 +81,30 @@ function renderHub() {
   const title = $('#hubTitle'), sub = $('#hubSub');
   if (ui.peek) {
     const info = E.MANIFEST[ui.peek];
-    title.textContent = displayName(ui.peek);
     const meta = `${prettyKey(info.key)} · ${info.bpm} BPM`;
-    if (!E.stemTypeFor(ui.layer, ui.peek)) sub.innerHTML = `${meta}<br>No ${def.label} stem`;
-    else if (s.song === ui.peek) sub.innerHTML = `${meta}<br><b>Playing</b> · pick again to remove`;
-    else sub.innerHTML = `${meta}<br>Add as <b>${def.label}</b>`;
+    let html;
+    if (!E.stemTypeFor(ui.layer, ui.peek)) html = `${meta}<br>No ${def.label} stem`;
+    else if (s.song === ui.peek) {
+      const now = s.loading ? 'Loading…' : state.playing ? 'Playing' : 'Selected';
+      html = `${meta}<br><b>${now}</b> · pick again to remove`;
+    } else {
+      const part = info.parts && info.parts[E.stemTypeFor(ui.layer, ui.peek)];
+      html = `${meta}<br>Add ${part ? `the ${part} ` : ''}as <b>${def.label}</b>`;
+    }
+    setHub(title, displayName(ui.peek), sub, html);
   } else {
-    $('#hubIcon').innerHTML = LAYER_ICONS[ui.layer];
-    title.textContent = def.label;
-    sub.textContent = s.song ? displayName(s.song) : `Pick a ${def.label.toLowerCase()}`;
+    if ($('#hubIcon').dataset.layer !== ui.layer) { $('#hubIcon').dataset.layer = ui.layer; $('#hubIcon').innerHTML = LAYER_ICONS[ui.layer]; }
+    const name = def.label.toLowerCase();
+    setHub(title, def.label, sub, s.song ? escapeHtml(displayName(s.song)) : `Pick ${/^[aeiou]/.test(name) ? 'an' : 'a'} ${name}`);
   }
 }
+// The hub is a live region: only touch it when the text changes, or screen readers re-read
+// it on every render (progress ticks, hovers).
+function setHub(title, titleText, sub, subHtml) {
+  if (title.textContent !== titleText) title.textContent = titleText;
+  if (sub.dataset.html !== subHtml) { sub.dataset.html = subHtml; sub.innerHTML = subHtml; }
+}
+const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 // ---------- albums ----------
 function buildAlbums() {
@@ -112,7 +126,7 @@ function setAlbum(i) {
   const id = ui.albums[ui.album], album = albumById(id);
   const songs = songsForAlbum(E.MANIFEST, id);
   wheel.setPage(songs, displayName);
-  $('#albumName').innerHTML = `<b>${album.name}</b> · ${album.year || ''} · ${songs.length} tracks`;
+  $('#albumName').innerHTML = [`<b>${album.name}</b>`, album.year, `${songs.length} track${songs.length === 1 ? "" : "s"}`].filter(Boolean).join(' · ');
   $('#albumStrip').querySelectorAll('.album').forEach((b, k) => {
     b.setAttribute('aria-selected', k === ui.album);
     if (k === ui.album) b.scrollIntoView({ block: 'nearest', inline: 'nearest' });
@@ -166,7 +180,7 @@ function renderLayers() {
   for (const li of $('#layers').children) {
     const id = li.dataset.layer, s = state.layers[id], def = layerDef(id);
     li.classList.toggle('empty', !s.song);
-    li.classList.toggle('loading', s.loading);
+    li.classList.toggle('loading', s.loading || s.syncing);
     li.classList.toggle('muted', s.muted);
     li.classList.toggle('current', id === ui.layer);
     li.classList.toggle('playing', !!s.source && state.playing && !s.muted);
@@ -181,9 +195,10 @@ function renderLayers() {
       continue;
     }
     const info = E.MANIFEST[s.song];
-    song.textContent = displayName(s.song) + (s.type === 'all' ? ' (full mix)' : '');
-    sub.textContent = s.loading
-      ? (s.progress < 1 ? `Loading… ${Math.round((s.progress || 0) * 100)}%` : 'Syncing to tempo…')
+    const part = s.type === 'all' ? 'full mix' : info.parts && info.parts[s.type];
+    song.textContent = displayName(s.song) + (part ? ` (${part})` : '');
+    sub.textContent = s.loading && s.progress < 1 ? `Loading… ${Math.round((s.progress || 0) * 100)}%`
+      : s.loading || s.syncing ? 'Syncing to tempo…'
       : `${albumById(info.album).name} · ${prettyKey(info.key)}${shiftLabel(s.song)}`;
     const badge = $('.layer-badge', li);
     if (badge.dataset.album !== info.album) { badge.dataset.album = info.album; badge.innerHTML = albumArtUnique(info.album); }
@@ -199,18 +214,31 @@ function buildControls() {
     let timer;
     const stopRepeat = () => clearTimeout(timer);
     $(btn).addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return; // a right-click's menu would swallow the pointerup: runaway repeat
       e.preventDefault();
+      $(btn).setPointerCapture(e.pointerId);
       step(d);
       const repeat = (delay) => { timer = setTimeout(() => { step(d); repeat(70); }, delay); };
       repeat(420);
     });
-    ['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => $(btn).addEventListener(ev, stopRepeat));
+    ['pointerup', 'pointerleave', 'pointercancel', 'lostpointercapture', 'contextmenu'].forEach((ev) => $(btn).addEventListener(ev, stopRepeat));
+    addEventListener('blur', stopRepeat);
     $(btn).addEventListener('keydown', (e) => { if (e.key === 'Enter') step(d); });
   }
-  $('.tempo').addEventListener('wheel', (e) => { e.preventDefault(); step(e.deltaY < 0 ? 1 : -1); }, { passive: false });
+  // One step per notch: trackpads send many small (and sideways) deltas per gesture.
+  let wheelAcc = 0;
+  $('.tempo').addEventListener('wheel', (e) => {
+    e.preventDefault();
+    if (Math.abs(e.deltaY) < Math.abs(e.deltaX)) return;
+    wheelAcc += e.deltaMode === 1 ? e.deltaY * 40 : e.deltaY;
+    if (Math.abs(wheelAcc) < 50) return;
+    step(wheelAcc < 0 ? 1 : -1);
+    wheelAcc = 0;
+  }, { passive: false });
 
   const sel = $('#masterKey');
-  sel.innerHTML = '<option value="auto">Auto</option>' + NOTE_NAMES.map((n) => `<option value="${n}">${prettyKey(n)}</option>`).join('');
+  // Key lock matches minor keys (a major key counts as its relative minor), so offer those.
+  sel.innerHTML = '<option value="auto">Auto</option>' + NOTE_NAMES.map((n) => `<option value="${n}">${prettyKey(n)}m</option>`).join('');
   sel.onchange = () => { E.ensureCtx(); E.setMasterKey(sel.value); scheduleHash(); };
   $('#keyLockBtn').onclick = () => { E.ensureCtx(); E.setKeyLock(!state.keyLock); scheduleHash(); };
 
@@ -221,9 +249,17 @@ function buildControls() {
   $('#playBtn').onclick = () => E.togglePlay();
   $('#randomBtn').onclick = () => E.randomize();
   $('#recBtn').onclick = () => E.toggleRecord(download);
-  $('#exportBtn').onclick = () => {
-    const blob = E.exportLoopWav();
-    if (blob) { download(blob, 'dream-chamber-loop.wav'); toast('Exported one 32-bar loop'); }
+  $('#exportBtn').onclick = async () => {
+    const btn = $('#exportBtn');
+    if (btn.disabled) return;
+    btn.disabled = true;
+    try {
+      const blob = await E.exportLoopWav();
+      if (blob) { download(blob, 'dream-chamber-loop.wav'); toast('Exported one 32-bar loop'); }
+    } catch (err) {
+      console.error(err);
+      toast('Export failed — see console', 'error');
+    } finally { btn.disabled = false; }
   };
   $('#shareBtn').onclick = shareMix;
   $('#helpBtn').onclick = () => $('#help').showModal();
@@ -231,7 +267,7 @@ function buildControls() {
 
 function renderControls() {
   $('#bpmOut').textContent = state.bpm;
-  const anyLoading = E.activeLayers().some((id) => state.layers[id].loading);
+  const anyLoading = E.activeLayers().some((id) => state.layers[id].loading || state.layers[id].syncing);
   $('.tempo').classList.toggle('pending', anyLoading);
   $('#tempoSub').textContent = anyLoading ? 'Syncing…' : 'BPM';
   $('#masterKey').value = state.masterKey;
@@ -240,7 +276,7 @@ function renderControls() {
   const mr = E.masterRoot();
   $('#keySub').textContent = !state.keyLock ? 'Off · native keys'
     : state.masterKey !== 'auto' ? 'Locked'
-    : mr === null ? 'Auto' : `Auto · ${prettyKey(NOTE_NAMES[mr])}`;
+    : mr === null ? 'Auto' : `Auto · ${prettyKey(NOTE_NAMES[mr])} minor`; // shown uppercase: "m" would read as major
   document.body.classList.toggle('is-playing', state.playing);
   $('#playBtn .tlabel').textContent = state.playing ? 'Stop' : 'Play';
   $('#recBtn').classList.toggle('active', state.recording);
@@ -335,7 +371,8 @@ function bindFx() {
     if (e.pointerType === 'mouse') document.body.classList.remove('pad');
     if (spaceHeld) fxMove(e.clientX, e.clientY);
   });
-  addEventListener('blur', fxRelease);
+  // Keys released in another window never reach us: forget Space too, or the next press is ignored.
+  addEventListener('blur', () => { spaceHeld = false; fxRelease(); });
 }
 
 // ---------- keyboard ----------
@@ -353,6 +390,8 @@ function bindKeys() {
     }
     if (inField && e.key.startsWith('Arrow')) return;
     const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    // Holding a toggle key would re-fire it (add/remove/add, a burst of random mixes).
+    if (e.repeat && !/^(Arrow|[-+=_])/.test(k)) { e.preventDefault(); return; }
     const actions = {
       1: () => setLayer('groove'), 2: () => setLayer('lead'), 3: () => setLayer('texture'),
       c: () => cycleLayer(1),
@@ -380,9 +419,19 @@ let padStickActive = false;
 function pollGamepad() {
   const pads = navigator.getGamepads ? navigator.getGamepads() : [];
   const gp = [...pads].find(Boolean);
-  if (!gp) return;
+  if (!gp) { // disconnected (battery, Bluetooth): don't leave FX held
+    if (prevButtons[2]) fxRelease();
+    prevButtons.length = 0;
+    return;
+  }
   const pressed = gp.buttons.map((b) => b.pressed);
   const down = (i) => pressed[i] && !prevButtons[i];
+  if ($('#help').open) { // A, B or Start closes the help; nothing reaches the wheel behind it
+    if (down(0) || down(1) || down(9)) $('#help').close();
+    if (ui.fx.held && !pressed[2]) fxRelease(); // X let go while the help was up
+    pressed.forEach((p, i) => (prevButtons[i] = p));
+    return;
+  }
   const [lx = 0, ly = 0, rx = 0, ry = 0] = gp.axes;
   if (pressed.some(Boolean) || Math.hypot(lx, ly) > 0.5 || Math.hypot(rx, ry) > 0.5) document.body.classList.add('pad');
 
@@ -398,7 +447,10 @@ function pollGamepad() {
   if (down(13)) E.setBpm(state.bpm - 1);
   if (down(14)) wheel.move(-1);
   if (down(15)) wheel.move(1);
-  if (down(9)) E.togglePlay();
+  if (down(9)) {
+    E.togglePlay();
+    if (E.ctx && E.ctx.state !== 'running') toast('Click or press any key to turn the sound on');
+  }
   if (down(8)) E.randomize();
   if (pressed[2]) {
     if (!ui.fx.held) { E.ensureCtx(); ui.fx.held = true; $('#fxBtn').classList.add('held'); }
@@ -433,14 +485,14 @@ async function restoreFromHash() {
   const raw = location.hash.slice(1);
   if (!raw) return false;
   const p = new URLSearchParams(raw);
-  const codeToSong = Object.fromEntries(Object.entries(E.MANIFEST).map(([song, info]) => [info.code, song]));
+  const codeToSong = new Map(Object.entries(E.MANIFEST).map(([song, info]) => [info.code, song])); // a Map: '#g=constructor' finds nothing
   restoring = true;
   try {
     const bpm = Number(p.get('bpm'));
     if (bpm >= E.BPM_MIN && bpm <= E.BPM_MAX) { state.bpm = Math.round(bpm); state.tempoTouched = true; }
     if (p.get('lock') === '0') state.keyLock = false;
     const key = p.get('key');
-    if (key && NOTE[key] !== undefined) state.masterKey = key;
+    if (key && Object.hasOwn(NOTE, key)) state.masterKey = NOTE_NAMES[NOTE[key]]; // Db, A# etc. -> the picker's spelling
     // Selection order matters: the first slot is the auto-key anchor.
     const order = [...new Set((p.get('a') || 'glt').split('').map((ch) => SLOT_LETTERS[ch]).filter(Boolean).concat(Object.values(SLOT_LETTERS)))];
     const loads = [];
@@ -449,15 +501,16 @@ async function restoreFromHash() {
       const vol = Number(p.get('v' + letter));
       if (p.has('v' + letter) && vol >= 0 && vol <= 100) s.volume = vol / 100;
       if (p.get('m' + letter) === '1') s.muted = true;
-      const song = codeToSong[p.get(letter)];
+      const song = codeToSong.get(p.get(letter));
       if (song) loads.push(E.selectStem(id, song, { noAutoplay: true, keepTempo: true }));
     }
     if (!loads.length) return false;
     const first = state.layers[order.find((id) => state.layers[id].song)];
     const i = ui.albums.indexOf(E.MANIFEST[first.song].album);
     if (i >= 0) setAlbum(i);
-    toast('Shared mix loaded — press Play');
+    toast('Loading shared mix…');
     await Promise.all(loads);
+    if (!state.playing && !E.playPending()) toast('Shared mix ready — press Play');
     return true;
   } finally {
     restoring = false;
@@ -495,6 +548,10 @@ async function boot() {
     toast('Could not load stems.json — run tools/build-stems.mjs first', 'error');
     return;
   }
+  if (!Object.keys(E.MANIFEST).length) {
+    toast(E.LOCAL ? 'No stems found: check the Stems folder shown in the server window' : 'No stems listed in stems.json', 'error');
+    return;
+  }
   buildHub();
   buildAlbums();
   buildLayers();
@@ -502,21 +559,32 @@ async function boot() {
   bindFx();
   bindKeys();
   addEventListener('gamepadconnected', () => { document.body.classList.add('pad'); toast('Controller connected'); });
+  addEventListener('gamepaddisconnected', () => fxRelease());
+  // Browsers only start audio after a click or key press (a controller doesn't count), and a
+  // share link builds the mix before any. Wake the audio on the first one, whatever it is.
+  const wake = () => { if (E.ctx && E.ctx.state !== 'running') E.ctx.resume().catch(() => {}); };
+  ['pointerdown', 'keydown'].forEach((ev) => addEventListener(ev, wake, { capture: true }));
 
-  createStage($('#stage'), () => {
+  const helpEl = $('#help');
+  const stage = createStage($('#stage'), () => {
     const m = E.meters();
     tickClock(m);
     pollGamepad();
     const active = {};
     for (const l of LAYERS) { const s = state.layers[l.id]; active[l.id] = !!(s.song && s.source && !s.muted && state.playing); }
-    return { meters: m, active, playing: state.playing, bpm: state.bpm, fx: ui.fx.amount, fxX: ui.fx.x, zone: ui.zone };
+    return { meters: m, active, playing: state.playing, bpm: state.bpm, fx: ui.fx.amount, fxX: ui.fx.x, zone: ui.zone, paused: helpEl.open };
   });
+  // Helmet models are optional local extras (see helmets.js); load them off the critical path.
+  if (E.LOCAL && E.LOCAL.helmets && E.LOCAL.helmets.length) loadHelmets(E.LOCAL).then((h) => stage.setHelmets(h));
   const measureZone = () => { ui.zone = Math.max(0.3, $('#wheelWrap').getBoundingClientRect().left / innerWidth); };
   addEventListener('resize', measureZone);
   measureZone();
 
   const ram = ui.albums.indexOf('ram');
   setAlbum(ram >= 0 ? ram : 0);
+  // The app rewrites the hash with replaceState (no event), so this only fires when someone
+  // pastes another share link into the address bar, even while this one loads: load that mix.
+  addEventListener('hashchange', () => location.reload());
   const restored = await restoreFromHash().catch((err) => { console.error('share restore failed', err); return false; });
   if (!restored) {
     let seen = false;
