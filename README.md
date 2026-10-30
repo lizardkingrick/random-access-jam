@@ -43,14 +43,15 @@ there is no account and no install.
 | Play / random | `P` / `R` | `Start` / `Back` |
 | Mute / clear layer | `M` / `Backspace` | `B` clears |
 
-## Credits
+## Contributors
 
-- **[Lizardkingrick](https://github.com/lizardkingrick)**: creator; UI, visuals and web app
-- **[MuscularCrab](https://github.com/MuscularCrab)**: contributor. Wrote the audio engine
-  (WSOLA time-stretch and pitch-shift, bar-quantized mixing, share links, record and export)
-  in [Dream Chamber Studios Remixed](https://github.com/MuscularCrab/dreamchamberremixed),
-  which this project builds on
-- **2Liter** ([@the_peoples_yinzer](https://www.instagram.com/the_peoples_yinzer/) on Instagram): contributor
+Three of us build this together. It grew out of MuscularCrab's idea and his original
+[Dream Chamber Studios Remixed](https://github.com/MuscularCrab/dreamchamberremixed).
+
+- **[MuscularCrab](https://github.com/MuscularCrab)**: the original idea and the audio engine
+  (time-stretch and pitch-shift, bar-quantized mixing, mastering, share links, record and export)
+- **[Lizardkingrick](https://github.com/lizardkingrick)**: UI, visuals and the web app
+- **2Liter** ([@the_peoples_yinzer](https://www.instagram.com/the_peoples_yinzer/) on Instagram)
 
 This is a fan project. It is not affiliated with Daft Punk, Epic Games or Fortnite. The stems
 come from The Daft Punk Experience and remain © Daft Punk and their labels. They are **not**

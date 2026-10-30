@@ -6,9 +6,9 @@
   "description": "Dream Chamber Remixed — a browser stem jam inspired by The Daft Punk Experience: pick a groove, lead and extra from different songs, auto-synced in tempo and key.",
   "homepage": "https://hiddenalchemist.com",
   "license": "MIT",
-  "author": "Lizardkingrick",
   "contributors": [
     "MuscularCrab (https://github.com/MuscularCrab)",
+    "Lizardkingrick (https://github.com/lizardkingrick)",
     "2Liter (https://www.instagram.com/the_peoples_yinzer/)"
   ],
   "repository": {
