@@ -43,18 +43,21 @@ export function createWheel(svg, { onPick, onFocusChange }) {
   const layer = el('g', { class: 'segs' });
   svg.append(rim, layer);
 
-  function setFocus(i, { fromPointer = false } = {}) {
+  // focusDom: keyboard moves take real focus, so Enter picks the highlighted song instead of
+  // clicking whatever button was focused before (and screen readers follow along).
+  function setFocus(i, { fromPointer = false, focusDom = false } = {}) {
     if (i === focus) return;
     if (items[focus]) items[focus].g.classList.remove('focus');
     focus = i;
     if (items[focus]) {
       items[focus].g.classList.add('focus');
-      if (!fromPointer && document.activeElement?.closest?.('.seg')) items[focus].g.focus({ preventScroll: true });
+      if (!fromPointer && (focusDom || document.activeElement?.closest?.('.seg'))) items[focus].g.focus({ preventScroll: true });
     }
     onFocusChange(items[focus]?.song ?? null);
   }
 
   function setPage(songs, labelOf) {
+    const hadFocus = !!document.activeElement?.closest?.('.seg'); // keep keyboard focus on the wheel
     layer.replaceChildren();
     focus = -1;
     const n = songs.length;
@@ -96,11 +99,14 @@ export function createWheel(svg, { onPick, onFocusChange }) {
       g.addEventListener('focus', () => setFocus(i));
       g.addEventListener('click', () => onPick(song));
       g.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); onPick(song); } // Space is the FX key
+        // Space is the FX key. Enter adds the highlighted song, which the mouse may have moved
+        // away from the focused one.
+        if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); if (!e.repeat) onPick(items[focus] ? items[focus].song : song); }
       });
       return { song, label, g };
     });
     onFocusChange(null);
+    if (hadFocus && items.length) setFocus(0, { focusDom: true });
   }
 
   // view: { disabled(song), active(song), loading(song), usedBy(song) -> [layerIds], layerLabel }
@@ -126,7 +132,7 @@ export function createWheel(svg, { onPick, onFocusChange }) {
     get focused() { return items[focus]?.song ?? null; },
     move(delta) {
       if (!items.length) return;
-      setFocus(focus < 0 ? (delta > 0 ? 0 : items.length - 1) : (focus + delta + items.length) % items.length);
+      setFocus(focus < 0 ? (delta > 0 ? 0 : items.length - 1) : (focus + delta + items.length) % items.length, { focusDom: true });
     },
     // Gamepad stick: pick the segment the stick points at (0° = up, clockwise).
     focusAngle(deg) {

@@ -8,17 +8,19 @@ export const ALBUMS = [
   { id: 'alive', name: 'Alive 2007', year: 2007 },
   { id: 'ram', name: 'Random Access Memories', year: 2013 },
   { id: 'weeknd', name: 'The Weeknd Collabs', year: 2016 },
+  // The instrument-gun area's loops (local extras): backing track, melody gun and rhythm gun.
+  { id: 'guns', name: 'Instrument Guns', year: 0 },
 ];
 
 export const albumById = (id) => ALBUMS.find((a) => a.id === id) || { id, name: 'Other', year: 0 };
 
 export function songsForAlbum(manifest, albumId) {
-  const num = (song) => Number(manifest[song].code.replace(/\D/g, '')) || 0;
-  return Object.keys(manifest).filter((s) => manifest[s].album === albumId).sort((a, b) => num(a) - num(b));
+  const rank = (song) => manifest[song].order ?? (Number(manifest[song].code.replace(/\D/g, '')) || 0);
+  return Object.keys(manifest).filter((s) => manifest[s].album === albumId).sort((a, b) => rank(a) - rank(b));
 }
 
 // "Harder Better Faster Stronger (Alive 2007)" → the album page already says Alive.
-export const displayName = (song) => song.replace(/\s*\(Alive 2007\)$/, '');
+export const displayName = (song) => song.replace(/\s*\((Alive 2007|Instrument Guns)\)$/, '');
 
 const ART = {
   homework: `
@@ -60,6 +62,15 @@ const ART = {
     <rect width="100" height="100" fill="#0a0507"/>
     <path d="M50 16 L57 43 L84 50 L57 57 L50 84 L43 57 L16 50 L43 43 Z" fill="#ff2340"/>
     <circle cx="50" cy="50" r="6" fill="#0a0507"/>`,
+  guns: `
+    <rect width="100" height="100" fill="url(#gnBg)"/>
+    <path d="M8 82 L50 50" stroke="#3cf08f" stroke-width="5" stroke-linecap="round"/>
+    <path d="M50 92 L50 50" stroke="#ff4fd8" stroke-width="5" stroke-linecap="round"/>
+    <path d="M92 82 L50 50" stroke="#ffc94a" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="50" cy="40" r="20" fill="none" stroke="#e8f1ff" stroke-width="3"/>
+    <path d="M50 14v10M50 56v10M24 40h10M66 40h10" stroke="#e8f1ff" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="50" cy="40" r="4" fill="#e8f1ff"/>
+    <defs><radialGradient id="gnBg" cx=".5" cy=".45" r=".7"><stop offset="0" stop-color="#1d1440"/><stop offset="1" stop-color="#05040c"/></radialGradient></defs>`,
   other: `<rect width="100" height="100" fill="#111"/>`,
 };
 

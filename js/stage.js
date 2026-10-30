@@ -21,6 +21,8 @@ export function createStage(canvas, getFrame) {
   let ringPhase = 0, t = 0, last = performance.now(), kick = 0;
   const pres = { groove: 0, lead: 0, texture: 0 };
   const lvl = { groove: 0, lead: 0, texture: 0 };
+  let helmets = null; // optional point clouds from helmets.js
+  const holo = { canvas: null, ctx: null, img: null, px: null, w: 0, h: 0 };
 
   function resize() {
     dpr = Math.min(devicePixelRatio || 1, 1.5);
@@ -31,36 +33,69 @@ export function createStage(canvas, getFrame) {
     arcGrad = g.createLinearGradient(0, 0, w, 0);
     [['#ffc94a', 0], ['#ffb347', 0.2], ['#3ce08c', 0.42], ['#2fd3c6', 0.58], ['#4c7dff', 0.78], ['#b65cff', 1]]
       .forEach(([c, o]) => arcGrad.addColorStop(o, c));
+    if (w && h) paintBackdrop();
   }
 
+  // The backdrop (base colour + violet glow) only changes with the kick, so it is painted once
+  // per size at the quiet and at the loudest glow and cross-faded each frame. Re-filling a
+  // full-screen gradient every frame cost ~6 ms on software-rendered machines.
+  const backdrop = [document.createElement('canvas'), document.createElement('canvas')];
+  function paintBackdrop() {
+    const cx = w * (w / dpr < 900 ? 0.5 : 0.4), S = Math.min(w, h);
+    backdrop.forEach((c, k) => {
+      c.width = w;
+      c.height = h;
+      const bg = c.getContext('2d');
+      bg.fillStyle = '#020309';
+      bg.fillRect(0, 0, w, h);
+      const glow = bg.createRadialGradient(cx, h * 0.45, 0, cx, h * 0.45, S * 0.9);
+      glow.addColorStop(0, `rgba(40, 30, 110, ${k ? 0.5 : 0.35})`);
+      glow.addColorStop(1, 'rgba(2, 3, 9, 0)');
+      bg.fillStyle = glow;
+      bg.fillRect(0, 0, w, h);
+    });
+  }
+
+  let lastDraw = 0, lastRaf = 0;
   function frame(now) {
     requestAnimationFrame(frame);
+    const f = getFrame(); // every frame: it also polls the controller
+    // Pace the drawing: ~60 fps while playing, 30 when idle, 10 behind the help dialog. A
+    // 120-144 Hz screen would otherwise draw (and cost) two or three times as much. Half a
+    // refresh of slack, so a 75 or 144 Hz screen doesn't drop to every other frame.
+    const minGap = f.paused ? 100 : f.playing || f.fx ? 1000 / 60 : 1000 / 30;
+    const refresh = Math.min(50, now - lastRaf);
+    lastRaf = now;
+    if (now - lastDraw < minGap - refresh / 2) return;
+    lastDraw = now;
     resize();
-    const f = getFrame();
+    if (!w || !h) return; // not laid out yet
     const m = f.meters;
-    const speed = reduce.matches ? 0.25 : 1;
-    const dt = Math.min(0.05, (now - last) / 1000) * speed;
+    const still = reduce.matches;
+    const dt = Math.min(0.1, (now - last) / 1000) * (still ? 0.25 : 1);
     last = now;
     t += dt;
-    kick = Math.max(kick * Math.pow(0.02, dt), f.playing && m.beat < 0.12 ? 1 : 0, m.bass);
-    ringPhase += dt * (f.playing ? f.bpm / 60 / 4 : 0.06) * (1 + f.fx * 1.5);
+    // Reduced motion: no beat flashes or zooming dome, just a slow glow that follows the bass.
+    if (still) kick += (Math.min(0.3, m.bass) - kick) * Math.min(1, dt * 2);
+    else kick = Math.max(kick * Math.pow(0.02, dt), f.playing && m.beat < 0.12 ? 1 : 0, m.bass);
+    if (!still) ringPhase += dt * (f.playing ? f.bpm / 60 / 4 : 0.06) * (1 + f.fx * 1.5);
 
     const narrow = w / dpr < 900;
     const fx = narrow ? 0.5 : 0.4;
     const cx = w * fx, cy = h * 0.6, S = Math.min(w, h);
 
-    // backdrop
+    // backdrop: the glow brightens with the kick (0.35 -> 0.5 alpha)
     g.globalCompositeOperation = 'source-over';
     g.globalAlpha = 1;
-    g.fillStyle = '#020309';
-    g.fillRect(0, 0, w, h);
-    const glow = g.createRadialGradient(cx, h * 0.45, 0, cx, h * 0.45, S * 0.9);
-    glow.addColorStop(0, `rgba(40, 30, 110, ${0.35 + kick * 0.15})`);
-    glow.addColorStop(1, 'rgba(2, 3, 9, 0)');
-    g.fillStyle = glow;
-    g.fillRect(0, 0, w, h);
+    g.drawImage(backdrop[0], 0, 0);
+    if (kick > 0.01) {
+      g.globalAlpha = Math.min(1, kick);
+      g.drawImage(backdrop[1], 0, 0);
+      g.globalAlpha = 1;
+    }
 
     drawDome(cx, cy, S);
+    if (helmets) drawHelmets(f, S, narrow);
     drawStrands(cx, h * 0.5, S, m);
     drawFloor(cx, h, S, m);
 
@@ -77,9 +112,11 @@ export function createStage(canvas, getFrame) {
       lead: [zx + zw * 0.3, h * (narrow ? 0.26 : 0.36)],
     };
     const size = (id, k) => S * k * easeOutBack(pres[id]) * (1 + lvl[id] * 0.28) * (narrow ? 0 : 1); // phones: no room
-    if (pres.texture > 0.01) drawCube(pos.texture[0], pos.texture[1] + bob(0), size('texture', 0.07), lvl.texture);
-    if (pres.groove > 0.01) drawWireSphere(pos.groove[0], pos.groove[1] + bob(2), size('groove', 0.085), lvl.groove);
-    if (pres.lead > 0.01) drawDisco(pos.lead[0], pos.lead[1] + bob(4), size('lead', 0.075), lvl.lead);
+    if (!narrow) { // phones: no room, and no point computing invisible geometry
+      if (pres.texture > 0.01) drawCube(pos.texture[0], pos.texture[1] + bob(0), size('texture', 0.07), lvl.texture);
+      if (pres.groove > 0.01) drawWireSphere(pos.groove[0], pos.groove[1] + bob(2), size('groove', 0.085), lvl.groove);
+      if (pres.lead > 0.01) drawDisco(pos.lead[0], pos.lead[1] + bob(4), size('lead', 0.075), lvl.lead);
+    }
 
     if (f.fx > 0) { // FX held: tint the scene
       g.globalCompositeOperation = 'source-over';
@@ -95,17 +132,93 @@ export function createStage(canvas, getFrame) {
     const frac = ringPhase % 1;
     g.globalCompositeOperation = 'lighter';
     g.strokeStyle = arcGrad;
-    const tilt = Math.sin(t * 0.13) * 0.06;
+    const tilt = Math.sin(t * 0.13) * 0.06, ct = Math.cos(tilt), st = Math.sin(tilt);
+    const alpha = 0.32 + kick * 0.25;
+    // Rings fade in near the centre; the rest share one alpha, so they're stroked in a few
+    // batches of similar width instead of one stroke per ring.
+    let batch = null, batchW = 0;
+    const flush = () => { if (batch) { g.globalAlpha = alpha; g.lineWidth = batchW; g.stroke(batch); batch = null; } };
+    const rMax = Math.hypot(Math.max(cx, w - cx) / 1.35, cy / 0.95) + 20 * dpr; // beyond: off-screen
     for (let k = N; k >= 0; k--) {
       const r = base * Math.pow(growth, k + frac);
+      if (r > rMax) continue;
       const fadeIn = Math.min(1, (r - base) / (base * 2.5));
-      g.globalAlpha = fadeIn * (0.32 + kick * 0.25);
-      g.lineWidth = (0.6 + r * 0.0035) * dpr;
-      g.beginPath();
-      g.ellipse(cx, cy, r * 1.35, r * 0.95, tilt, Math.PI * 1.0, Math.PI * 2.0);
-      g.stroke();
+      const lw = Math.round((0.6 + r * 0.0035) * dpr * 4) / 4;
+      if (fadeIn < 1) {
+        flush();
+        g.globalAlpha = fadeIn * alpha;
+        g.lineWidth = lw;
+        g.beginPath();
+        g.ellipse(cx, cy, r * 1.35, r * 0.95, tilt, Math.PI, Math.PI * 2);
+        g.stroke();
+        continue;
+      }
+      if (lw !== batchW) { flush(); batch = new Path2D(); batchW = lw; }
+      batch.moveTo(cx - r * 1.35 * ct, cy - r * 1.35 * st); // the arc's start, so rings don't join up
+      batch.ellipse(cx, cy, r * 1.35, r * 0.95, tilt, Math.PI, Math.PI * 2);
     }
+    flush();
     g.globalAlpha = 1;
+  }
+
+  // Helmet holograms: giant dotted projections of Thomas's (silver) and Guy-Man's (gold)
+  // helmets behind the stage objects. They turn slowly, nod on the beat and glow with the
+  // bass. The dots go straight into a pixel buffer that is added to the stage in one
+  // drawImage: about 4x cheaper than thousands of rects on a software-rendered canvas.
+  const LIGHT = (() => { const l = [-0.5, 0.6, 0.65], n = Math.hypot(...l); return l.map((x) => x / n); })();
+  const HOLO = [['tb3', -1, [196, 226, 255]], ['gm08', 1, [255, 205, 96]]];
+  function drawHelmets(f, S, narrow) {
+    const H = Math.round(S * (narrow ? 0.28 : 0.36)); // on-screen helmet height
+    const both = !!(helmets.tb3 && helmets.gm08);
+    const bw = Math.ceil(H * (both ? 2.7 : 1.7)), bh = Math.ceil(H * 1.35);
+    if (holo.w !== bw || holo.h !== bh) {
+      holo.canvas ??= document.createElement('canvas');
+      holo.canvas.width = holo.w = bw;
+      holo.canvas.height = holo.h = bh;
+      holo.ctx = holo.canvas.getContext('2d');
+      holo.img = holo.ctx.createImageData(bw, bh);
+      holo.px = new Uint32Array(holo.img.data.buffer);
+    }
+    const px = holo.px;
+    px.fill(0);
+    const gain = Math.min(1, (f.playing ? 0.5 : 0.36) + kick * 0.3) * 255;
+    const pitch = reduce.matches ? 0 : -0.07 * kick; // nod forward on the kick
+    const cp = Math.cos(pitch), sp = Math.sin(pitch);
+    for (const [key, side, [r, gr, b]] of HOLO) {
+      const cloud = helmets[key];
+      if (!cloud) continue;
+      const rgb = (b << 16) | (gr << 8) | r; // ImageData is RGBA in memory: little-endian ABGR
+      const yaw = side * 0.28 + Math.sin(t * 0.3 + (side > 0 ? 1.4 : 0)) * 0.38;
+      const cyw = Math.cos(yaw), syw = Math.sin(yaw);
+      const ox = bw / 2 + (both ? side * H * 0.62 : 0);
+      const oy = bh * 0.55 + Math.sin(t * 0.9 + side) * S * 0.01;
+      const P = cloud.pos, N = cloud.nor;
+      for (let j = 0; j < cloud.count * 3; j += 3) {
+        // yaw about y, then pitch about x; the camera looks from +z
+        const x1 = P[j] * cyw + P[j + 2] * syw, z1 = -P[j] * syw + P[j + 2] * cyw;
+        const y2 = P[j + 1] * cp - z1 * sp, z2 = P[j + 1] * sp + z1 * cp;
+        const s = H * 3 / (3 - z2);
+        const x = (ox + x1 * s) | 0, y = (oy - y2 * s) | 0;
+        if (x < 0 || y < 0 || x >= bw - 1 || y >= bh - 1) continue;
+        const nx = N[j] * cyw + N[j + 2] * syw, nz1 = -N[j] * syw + N[j + 2] * cyw;
+        const ny = N[j + 1] * cp - nz1 * sp, nz = N[j + 1] * sp + nz1 * cp;
+        const rim = 1 - Math.abs(nz);
+        const lit = nz > 0 ? 0.28 + Math.max(0, nx * LIGHT[0] + ny * LIGHT[1] + nz * LIGHT[2]) * 0.5 + rim * rim * 0.45 : 0.1;
+        const a = Math.min(255, lit * gain) | 0;
+        const v = ((a << 24) | rgb) >>> 0;
+        // 2x2 dot; where dots overlap the brighter one wins, so the back never covers the front
+        const o = y * bw + x;
+        if (px[o] >>> 24 < a) px[o] = v;
+        if (px[o + 1] >>> 24 < a) px[o + 1] = v;
+        if (px[o + bw] >>> 24 < a) px[o + bw] = v;
+        if (px[o + bw + 1] >>> 24 < a) px[o + bw + 1] = v;
+      }
+    }
+    holo.ctx.putImageData(holo.img, 0, 0);
+    const zx = narrow ? w * 0.5 : (w * f.zone) / 2, zy = h * 0.3;
+    g.globalCompositeOperation = 'lighter';
+    g.globalAlpha = 1;
+    g.drawImage(holo.canvas, Math.round(zx - bw / 2), Math.round(zy - bh * 0.55));
   }
 
   function drawStrands(cx, cy, S, m) {
@@ -148,17 +261,18 @@ export function createStage(canvas, getFrame) {
     });
     g.setLineDash([]);
 
-    // amber dot ring chasing the beat
-    const D = 48;
+    // amber dot ring chasing the beat (unlit and lit dots each go in one path)
+    const D = 48, dots = new Path2D(), litDots = new Path2D();
     for (let j = 0; j < D; j++) {
       const a = (j / D) * TAU + t * 0.15;
       const lit = m.beatIndex >= 0 && j % 16 === m.beatIndex % 16;
-      g.fillStyle = lit ? '#fff2b0' : '#ffb53d';
-      g.globalAlpha = lit ? 1 : 0.55;
-      g.beginPath();
-      g.arc(cx + Math.cos(a) * rx * 0.84, fy + Math.sin(a) * ry * 0.84, (lit ? 4 : 2.6) * dpr, 0, TAU);
-      g.fill();
+      const x = cx + Math.cos(a) * rx * 0.84, y = fy + Math.sin(a) * ry * 0.84, r = (lit ? 4 : 2.6) * dpr;
+      const p = lit ? litDots : dots;
+      p.moveTo(x + r, y);
+      p.arc(x, y, r, 0, TAU);
     }
+    g.fillStyle = '#ffb53d'; g.globalAlpha = 0.55; g.fill(dots);
+    g.fillStyle = '#fff2b0'; g.globalAlpha = 1; g.fill(litDots);
     const cg = g.createRadialGradient(cx, fy - ry * 0.05, 0, cx, fy - ry * 0.05, rx * 0.2);
     cg.addColorStop(0, `rgba(255,255,255,${0.55 + m.bass * 0.45})`);
     cg.addColorStop(1, 'rgba(255,255,255,0)');
@@ -167,10 +281,8 @@ export function createStage(canvas, getFrame) {
     g.beginPath(); g.ellipse(cx, fy - ry * 0.05, rx * 0.2, ry * 0.25, 0, 0, TAU); g.fill();
   }
 
-  function drawWireSphere(x, y, r, level) {
-    const ay = t * (0.5 + level), ax = 0.35;
-    g.globalCompositeOperation = 'lighter';
-    g.strokeStyle = '#3cf08f';
+  // Unit-sphere polylines for the wire sphere (5 latitudes, 12 longitudes), built once.
+  const SPHERE_LINES = (() => {
     const lines = [];
     for (let lat = -60; lat <= 60; lat += 30) {
       const pts = [];
@@ -188,21 +300,30 @@ export function createStage(canvas, getFrame) {
       }
       lines.push(pts);
     }
-    for (const pts of lines) {
-      let prev = null;
+    return lines;
+  })();
+
+  function drawWireSphere(x, y, r, level) {
+    const ay = t * (0.5 + level), ax = 0.35;
+    g.globalCompositeOperation = 'lighter';
+    g.strokeStyle = '#3cf08f';
+    g.lineWidth = (1.4 + level * 1.5) * dpr;
+    // Front and back runs go in one path each: two strokes instead of ~450.
+    const front = new Path2D(), back = new Path2D();
+    for (const pts of SPHERE_LINES) {
+      let prev = null, side = null;
       for (const p0 of pts) {
         const p = rot(p0, ax, ay);
         if (prev) {
-          g.globalAlpha = (p[2] + prev[2]) / 2 < 0 ? 0.95 : 0.28;
-          g.lineWidth = (1.4 + level * 1.5) * dpr;
-          g.beginPath();
-          g.moveTo(x + prev[0] * r, y + prev[1] * r);
-          g.lineTo(x + p[0] * r, y + p[1] * r);
-          g.stroke();
+          const path = (p[2] + prev[2]) / 2 < 0 ? front : back;
+          if (path !== side) { path.moveTo(x + prev[0] * r, y + prev[1] * r); side = path; }
+          path.lineTo(x + p[0] * r, y + p[1] * r);
         }
         prev = p;
       }
     }
+    g.globalAlpha = 0.28; g.stroke(back);
+    g.globalAlpha = 0.95; g.stroke(front);
     g.globalAlpha = 1;
   }
 
@@ -222,6 +343,7 @@ export function createStage(canvas, getFrame) {
     };
     g.lineWidth = 1.6 * dpr;
     g.strokeStyle = '#ff4fd8';
+    const edges = [new Path2D(), new Path2D()]; // tile outlines, grazing and facing: two strokes
     for (let i = 0; i < LAT; i++) {
       for (let j = 0; j < LON; j++) {
         const c = rot((() => {
@@ -237,11 +359,14 @@ export function createStage(canvas, getFrame) {
         q.forEach((p, k) => (k ? g.lineTo : g.moveTo).call(g, x + p[0] * r, y + p[1] * r));
         g.closePath();
         g.fill();
-        g.globalAlpha = 0.6 + facing * 0.4;
-        g.stroke();
-        g.globalAlpha = 1;
+        const e = edges[facing > 0.5 ? 1 : 0];
+        q.forEach((p, k) => (k ? e.lineTo : e.moveTo).call(e, x + p[0] * r, y + p[1] * r));
+        e.closePath();
       }
     }
+    g.globalAlpha = 0.7; g.stroke(edges[0]);
+    g.globalAlpha = 0.95; g.stroke(edges[1]);
+    g.globalAlpha = 1;
     g.lineWidth = 3 * dpr;
     g.beginPath(); g.arc(x, y, r, 0, TAU); g.stroke();
   }
@@ -285,4 +410,7 @@ export function createStage(canvas, getFrame) {
   }
 
   requestAnimationFrame(frame);
+  return {
+    setHelmets(clouds) { helmets = clouds && (clouds.tb3 || clouds.gm08) ? clouds : null; },
+  };
 }
