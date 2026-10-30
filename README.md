@@ -45,13 +45,9 @@ there is no account and no install.
 
 ## Contributors
 
-Three of us build this together. It grew out of MuscularCrab's idea and his original
-[Dream Chamber Studios Remixed](https://github.com/MuscularCrab/dreamchamberremixed).
-
-- **[MuscularCrab](https://github.com/MuscularCrab)**: the original idea and the audio engine
-  (time-stretch and pitch-shift, bar-quantized mixing, mastering, share links, record and export)
-- **[Lizardkingrick](https://github.com/lizardkingrick)**: UI, visuals and the web app
-- **2Liter** ([@the_peoples_yinzer](https://www.instagram.com/the_peoples_yinzer/) on Instagram)
+- **[MuscularCrab](https://github.com/MuscularCrab)**: audio engine
+- **[Lizardkingrick](https://github.com/lizardkingrick)**: UI, visuals and web app
+- **2Liter** ([@the_peoples_yinzer](https://www.instagram.com/the_peoples_yinzer/) on Instagram): contributor
 
 This is a fan project. It is not affiliated with Daft Punk, Epic Games or Fortnite. The stems
 come from The Daft Punk Experience and remain © Daft Punk and their labels. They are **not**
