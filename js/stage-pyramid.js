@@ -228,164 +228,30 @@ const cockpitTexture = () => paintCanvas(1024, 512, (g) => {
   for (let y = 0; y < 512; y += 30) g.fillRect(0, y, 1024, 2);
 });
 
-// The two helmets, front on, as a silhouette against the back wall with the metal catching light.
-// Each is drawn on a 512x640 canvas with the neck running off the bottom.
+// The two of them: dark figures against the back wall, with a thin strip of light for a visor.
+// The head is drawn on a 512x640 canvas with the neck running off the bottom.
 const NECK = '#030304';
 
-// Silver: a smooth dome over a wide visor band, ear pods proud of the band, and a jaw that tapers
-// hard to a narrow chin piece.
-const silverHelmet = () => paintCanvas(512, 640, (g) => {
+const figureHead = () => paintCanvas(512, 640, (g) => {
   g.fillStyle = NECK;
-  g.fillRect(208, 460, 96, 180);
-  const pod = (x) => {
-    const m = g.createLinearGradient(x, 0, x + 50, 0);
-    m.addColorStop(0, '#59606e');
-    m.addColorStop(0.5, '#dfe4ee');
-    m.addColorStop(1, '#3a3f4b');
-    g.fillStyle = m;
-    g.beginPath();
-    g.roundRect(x, 222, 50, 88, 18);
-    g.fill();
-    g.fillStyle = '#0a0b0e';
-    g.fillRect(x + 8, 262, 34, 6);
-  };
-  pod(56);
-  pod(406);
-  const shell = new Path2D();
-  shell.moveTo(92, 262);
-  shell.bezierCurveTo(96, 120, 170, 52, 256, 52);
-  shell.bezierCurveTo(342, 52, 416, 120, 420, 262);
-  shell.lineTo(412, 312);
-  shell.bezierCurveTo(392, 330, 368, 338, 352, 340);
-  shell.bezierCurveTo(336, 400, 312, 452, 288, 480);
-  shell.lineTo(224, 480);
-  shell.bezierCurveTo(200, 452, 176, 400, 160, 340);
-  shell.bezierCurveTo(144, 338, 120, 330, 100, 312);
-  shell.closePath();
-  const steel = g.createRadialGradient(256, 150, 20, 256, 220, 300);
-  steel.addColorStop(0, '#2b2e36');
-  steel.addColorStop(1, '#07080a');
-  g.fillStyle = steel;
-  g.fill(shell);
-  g.save();
-  g.clip(shell);
-  // the light across the dome
-  g.strokeStyle = 'rgba(235,240,250,.9)';
-  g.lineWidth = 26;
-  g.lineCap = 'round';
+  g.fillRect(221, 460, 70, 180);
   g.beginPath();
-  g.arc(256, 214, 112, Math.PI * 1.2, Math.PI * 1.8);
-  g.stroke();
-  // the visor band, the widest and brightest thing on the helmet
-  const band = g.createLinearGradient(0, 222, 0, 318);
-  band.addColorStop(0, '#fbfcff');
-  band.addColorStop(0.55, '#bcc4d4');
-  band.addColorStop(1, '#23262e');
-  g.fillStyle = band;
-  g.beginPath();
-  g.moveTo(84, 236);
-  g.quadraticCurveTo(256, 196, 428, 236);
-  g.lineTo(420, 318);
-  g.quadraticCurveTo(256, 346, 92, 318);
-  g.closePath();
+  g.ellipse(256, 340, 115, 145, 0, 0, TAU);
   g.fill();
-  g.restore();
-  // the chin piece
-  const chin = g.createLinearGradient(226, 0, 286, 0);
-  chin.addColorStop(0, '#7b8290');
-  chin.addColorStop(0.5, '#f2f4f9');
-  chin.addColorStop(1, '#6a707d');
-  g.fillStyle = chin;
-  g.beginPath();
-  g.moveTo(218, 352);
-  g.lineTo(294, 352);
-  g.lineTo(274, 470);
-  g.lineTo(238, 470);
-  g.closePath();
-  g.fill();
-  g.fillStyle = '#0a0b0e';
-  for (let x = 240; x <= 266; x += 13) g.fillRect(x, 368, 5, 88);
+  g.fillStyle = '#ffdb99';
+  g.fillRect(166, 318, 180, 22);
 });
 
-// Gold: one great rounded black visor in a gold frame, with square ear panels.
-const goldHelmet = () => paintCanvas(512, 640, (g) => {
-  g.fillStyle = NECK;
-  g.fillRect(204, 470, 104, 170);
-  const shell = new Path2D();
-  shell.moveTo(256, 44);
-  shell.bezierCurveTo(374, 44, 438, 140, 438, 262);
-  shell.bezierCurveTo(438, 362, 386, 456, 294, 486);
-  shell.lineTo(218, 486);
-  shell.bezierCurveTo(126, 456, 74, 362, 74, 262);
-  shell.bezierCurveTo(74, 140, 138, 44, 256, 44);
-  shell.closePath();
-  g.fillStyle = '#050403';
-  g.fill(shell);
-  g.save();
-  g.clip(shell);
-  // the frame around the visor
-  const frame = g.createLinearGradient(0, 40, 0, 490);
-  frame.addColorStop(0, '#fff0b4');
-  frame.addColorStop(0.45, '#e0a433');
-  frame.addColorStop(1, '#8f5f14');
-  g.strokeStyle = frame;
-  g.lineWidth = 30;
-  g.stroke(shell);
-  // a soft window reflection high on the visor
-  const glass = g.createRadialGradient(200, 130, 10, 200, 130, 150);
-  glass.addColorStop(0, 'rgba(255,255,255,.62)');
-  glass.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = glass;
-  g.beginPath();
-  g.ellipse(200, 130, 150, 74, -0.45, 0, TAU);
-  g.fill();
-  g.restore();
-  const panel = (x, dir) => {
-    const m = g.createLinearGradient(x, 0, x + 48, 0);
-    m.addColorStop(0, '#a87318');
-    m.addColorStop(0.5, '#ffd978');
-    m.addColorStop(1, '#a87318');
-    g.fillStyle = m;
-    g.beginPath();
-    g.roundRect(x, 216, 48, 128, 7);
-    g.fill();
-    g.strokeStyle = '#2a1a05';
-    g.lineWidth = 6;
-    g.beginPath();
-    g.moveTo(x + 24 - dir * 12, 234);
-    g.lineTo(x + 24 + dir * 12, 234);
-    g.lineTo(x + 24 + dir * 12, 280);
-    g.lineTo(x + 24 - dir * 12, 280);
-    g.lineTo(x + 24 - dir * 12, 326);
-    g.lineTo(x + 24 + dir * 12, 326);
-    g.stroke();
-  };
-  panel(46, 1);
-  panel(418, -1);
-  g.fillStyle = frame;
-  g.beginPath();
-  g.roundRect(214, 470, 84, 18, 8);
-  g.fill();
-});
-
-// Shoulders in a dark jacket, with the odd sequin catching the light.
-const jacket = (sequin, seed) => paintCanvas(768, 384, (g) => {
+const figureBody = () => paintCanvas(768, 384, (g) => {
+  g.translate(384, 32);
+  g.scale(2.45, 2.45);
   g.fillStyle = NECK;
   g.beginPath();
-  g.moveTo(40, 384);
-  g.bezierCurveTo(44, 200, 110, 120, 290, 76);
-  g.lineTo(478, 76);
-  g.bezierCurveTo(658, 120, 724, 200, 728, 384);
-  g.closePath();
+  g.moveTo(-66, 170);
+  g.bezierCurveTo(-72, 60, -52, 26, -22, 18);
+  g.lineTo(22, 18);
+  g.bezierCurveTo(52, 26, 72, 60, 66, 170);
   g.fill();
-  const r = rng(seed);
-  g.fillStyle = sequin;
-  for (let i = 0; i < 150; i++) {
-    const side = r() < 0.5 ? -1 : 1, u = r();
-    const x = 384 + side * (110 + u * 270), y = 112 + u * u * 150 + r() * 120;
-    g.globalAlpha = 0.25 + r() * 0.75;
-    g.fillRect(x, y, 4, 4);
-  }
 });
 
 const deskTexture = () => paintCanvas(1024, 96, (g) => {
@@ -777,8 +643,8 @@ export function createPyramid(canvas, getFrame) {
   const cockU = { uMap: { value: cockpitTexture() }, uA: shared.uA, uB: shared.uB, uLight: { value: 0.1 } };
   // nodFrom: where in the beat this one's head goes down. They're never quite together.
   const performers = [
-    { x: -1.5, helmet: silverHelmet(), jacket: jacket('#dfe6f4', 3), lean: 0.03, nodFrom: 0 },
-    { x: 1.5, helmet: goldHelmet(), jacket: jacket('#ffd67a', 9), lean: -0.025, nodFrom: 0.035 },
+    { x: -1.5, lean: 0.03, nodFrom: 0 },
+    { x: 1.5, lean: -0.025, nodFrom: 0.035 },
   ];
   const cockpit = new Mesh(new PlaneGeometry(COCKPIT.halfW * 2 + 0.6, cockH + 1.3), new ShaderMaterial({
     vertexShader: BACK_VERT,
@@ -807,13 +673,14 @@ export function createPyramid(canvas, getFrame) {
     vertexShader: BACK_VERT, fragmentShader: FIGURE_FRAG, transparent: true, depthWrite: false,
     uniforms: { uMap: { value: map }, uLight: cockU.uLight },
   });
+  const headMap = figureHead(), bodyMap = figureBody();
   performers.forEach((p) => {
-    p.body = new Mesh(new PlaneGeometry(2.6, 1.3), figureMat(p.jacket));
+    p.body = new Mesh(new PlaneGeometry(2.6, 1.3), figureMat(bodyMap));
     p.body.position.set(p.x, cockY - 0.62, figureZ);
     p.body.renderOrder = 1;
     p.bodyY = p.body.position.y;
     scene.add(p.body);
-    const face = new Mesh(new PlaneGeometry(1.36, 1.7), figureMat(p.helmet));
+    const face = new Mesh(new PlaneGeometry(1.36, 1.7), figureMat(headMap));
     face.position.y = 0.85;
     face.renderOrder = 2;
     p.head = new Object3D();
