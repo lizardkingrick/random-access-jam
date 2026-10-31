@@ -1,0 +1,35 @@
+<!doctype html>
+<!-- Look development for the stage with no audio: a simulated song drives createStage.
+     /tools/stage-lab.html?bar=8.5&layers=glt&album=ram&freeze&open=0.3,0.7 -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stage lab</title>
+<style>html, body { margin: 0; height: 100%; background: #000; } canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }</style>
+<canvas id="stage"></canvas>
+<script type="module">
+import { createStage } from '../js/stage.js';
+const q = new URLSearchParams(location.search);
+const layers = q.get('layers') ?? 'glt';
+const bpm = Number(q.get('bpm') || 123);
+const start = Number(q.get('bar') || 0);
+const freeze = q.has('freeze');
+const open = (q.get('open') || '0,1').split(',').map(Number);
+const spectrum = new Uint8Array(256);
+const t0 = performance.now();
+const noise = (n) => Math.abs(Math.sin(n * 91.7) * 43758.5453) % 1;
+createStage(document.getElementById('stage'), () => {
+  const beats = start * 4 + (freeze ? 0.02 : (performance.now() - t0) / 60000 * bpm);
+  const beat = beats % 1, kick = Math.pow(1 - beat, 4), off = Math.pow(1 - ((beats + 0.5) % 1), 6);
+  const on = { groove: layers.includes('g'), lead: layers.includes('l'), texture: layers.includes('t') };
+  for (let i = 0; i < 256; i++) {
+    const u = i / 255;
+    spectrum[i] = 255 * Math.min(1, (0.25 + 0.6 * kick * Math.exp(-u * 26) + 0.38 * off * Math.exp(-Math.abs(u - 0.5) * 7)) * Math.exp(-u * 3.3) + 0.12 * noise(i + Math.floor(beats * 8)) * Math.exp(-u * 2));
+  }
+  const meters = {
+    groove: on.groove ? 0.34 + kick * 0.55 : 0, lead: on.lead ? 0.4 + 0.3 * Math.sin(beats * 0.8) ** 2 : 0, texture: on.texture ? 0.3 + off * 0.5 : 0,
+    bass: on.groove ? 0.15 + kick * 0.75 : 0, mid: 0.3, high: on.texture ? 0.2 + off * 0.5 : 0.1,
+    spectrum, beat, bar: (beats / 4) % 32, beatIndex: Math.floor(beats) % 128,
+  };
+  return { meters, active: on, playing: layers.length > 0, bpm, fx: q.has('fx') ? 1 : 0, fxX: Number(q.get('fx')) < 0 ? -1 : 1, zone: 0.7, open, paused: false, album: q.get('album') || 'alive' };
+});
+</script>

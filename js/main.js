@@ -694,7 +694,8 @@ async function boot() {
     pollGamepad();
     const active = {};
     for (const l of LAYERS) { const s = state.layers[l.id]; active[l.id] = !!(s.song && s.source && !s.muted && state.playing); }
-    return { meters: m, active, playing: state.playing, bpm: state.bpm, fx: ui.fx.amount, fxX: ui.fx.x, zone: ui.zone, open: ui.open, paused: helpEl.open };
+    const lead = LAYERS.map((l) => state.layers[l.id].song).find(Boolean); // the first filled layer sets the album
+    return { meters: m, active, playing: state.playing, bpm: state.bpm, fx: ui.fx.amount, fxX: ui.fx.x, zone: ui.zone, open: ui.open, paused: helpEl.open, album: lead ? E.MANIFEST[lead].album : null };
   });
   // The stage centres its pyramid over the open area between the side panels; when the panels
   // are stacked (phones, portrait) that's the whole width.
