@@ -1,9 +1,9 @@
-// The stage: a live concert seen from the crowd. A neon triangle full of lit haze, black masses in
-// silhouette, and the two of them as shadows on a bright ledge, nodding to the beat.
+// The stage: a live concert seen from the crowd. A pyramid of LED panels with two figures in its
+// cockpit, a lighting rig, haze, and an audience in silhouette, shot on a long lens.
 //
 // It is run like a lighting desk rather than a meter. Each stem layer owns part of the rig, so the
 // show builds as layers are added:
-//   Groove  the pyramid's neon and haze, and the crowd
+//   Groove  the pyramid's LED programs and the crowd
 //   Lead    the moving heads and lasers
 //   Extra   the side towers, the air and the phone lights
 // A cue changes every 8 bars (LED program, beams, camera) and everything moves in musical time.
@@ -12,17 +12,20 @@
 
 import {
   AdditiveBlending, BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, CylinderGeometry, DataTexture,
-  HalfFloatType, InstancedBufferAttribute, InstancedMesh, LinearFilter, LinearMipmapLinearFilter,
+  FloatType, FrontSide, HalfFloatType, InstancedBufferAttribute, InstancedMesh, LinearFilter, LinearMipmapLinearFilter,
   LinearSRGBColorSpace, Mesh, NoToneMapping, Object3D, OrthographicCamera, PerspectiveCamera, PlaneGeometry, Points,
-  Quaternion, RedFormat, RGBAFormat, Scene, ShaderMaterial, UnsignedByteType, Vector2, Vector3,
+  Quaternion, RedFormat, RGBAFormat, BackSide, Scene, ShaderMaterial, UnsignedByteType, Vector2, Vector3,
   WebGLRenderer, WebGLRenderTarget,
 } from './vendor/three.min.js';
 
 const TAU = Math.PI * 2;
 
-// Pyramid size in metres: half the base width, height, the base's height off the floor, and the
-// height of the ledge above the base.
-const W = 15.5, H = 20, Y0 = 1.4, SHELF = H * 0.41;
+// Pyramid size in metres: half the base width, height, and half the depth.
+const W = 15.5, H = 17.5, D = 15.5;
+const SLOPE = Math.hypot(H, D);
+const EDGE = SLOPE / Math.hypot(SLOPE, W); // slanted-edge distance factor, in face space
+const INRADIUS = (W * SLOPE) / (W + Math.hypot(W, SLOPE));
+const COCKPIT = { halfW: 3.1, s0: 5.6, s1: 10 }; // the opening in the front face, in face space
 
 // [a, b] per album: the main colour and the accent, linear RGB.
 const PALETTES = {
@@ -31,7 +34,7 @@ const PALETTES = {
   haa: [[1, 0.015, 0.02], [1, 0.92, 0.86]],
   ram: [[1, 0.5, 0.09], [1, 0.84, 0.55]],
   weeknd: [[0.9, 0.012, 0.1], [0.42, 0.05, 1]],
-  alive: [[1, 0.03, 0.72], [0.5, 0.08, 1]],
+  alive: [[1, 0.035, 0.02], [0.72, 0.82, 1]],
 };
 const paletteFor = (album) => PALETTES[Object.keys(PALETTES).find((k) => (album || '').includes(k))] || PALETTES.alive;
 
@@ -46,14 +49,14 @@ const CUES = [
   { prog: 2, beam: 'cross', cam: 4, swap: true, laser: false },
 ];
 
-// Long lenses from the back of the crowd: [position, target, vertical fov]. Nearly front on, because
-// the pyramid is flat layers of light. The last shot is on the two of them.
+// Long lenses from inside the crowd: [position, target, vertical fov]. Every shot keeps the whole
+// pyramid in frame except the last, which is on the booth.
 const CAMS = [
-  [[0, 3.2, 62], [0, 10.6, 0], 26],
-  [[-11, 3.2, 60], [0, 10.6, 0], 27],
-  [[11, 3.2, 60], [0, 10.6, 0], 27],
-  [[0, 3, 52], [0, 11, 0], 30],
-  [[1, 3.2, 62], [0, 12.2, 0], 13.5],
+  [[0, 2.3, 44], [0, 10.4, 0], 32],
+  [[-24, 3, 36], [1, 9.6, 2], 30],
+  [[14, 2.6, 47], [0, 10, 0], 30],
+  [[21, 2, 41], [-1, 9.4, 0], 35],
+  [[-2, 3, 48], [0, 6.1, 7], 12],
 ];
 
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
@@ -81,96 +84,125 @@ const NOISE = /* glsl */`
   float fbm(vec2 p) { return .55 * noise(p) + .3 * noise(p * 2.1 + 3.7) + .15 * noise(p * 4.3 + 9.2); }
 `;
 
-// ---------- the haze inside the frame ----------
-const HAZE_VERT = /* glsl */`
-  varying vec2 vP;
+// ---------- the pyramid's LED faces ----------
+const FACE_VERT = /* glsl */`
+  attribute vec3 aFace;
+  varying vec3 vP;
+  varying vec3 vW;
   void main() {
-    vP = position.xy - vec2(0., ${Y0.toFixed(2)});
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.);
+    vP = aFace;
+    vec4 w = modelMatrix * vec4(position, 1.);
+    vW = w.xyz;
+    gl_Position = projectionMatrix * viewMatrix * w;
   }
 `;
-const HAZE_FRAG = /* glsl */`
-  uniform float uT, uTime, uKick, uLevel, uHit, uGate, uIdle;
+const FACE_FRAG = /* glsl */`
+  uniform float uT, uKick, uLevel, uHit, uGate, uIdle, uGlow, uRes;
   uniform int uProg;
   uniform vec3 uA, uB;
   uniform sampler2D uSpec;
-  varying vec2 vP;
+  varying vec3 vP;
+  varying vec3 vW;
   ${NOISE}
-  const float W = ${W.toFixed(2)}, H = ${H.toFixed(2)}, SHELF = ${SHELF.toFixed(2)};
+  const float W = ${W.toFixed(2)}, S = ${SLOPE.toFixed(3)}, EDGE = ${EDGE.toFixed(4)}, INR = ${INRADIUS.toFixed(3)};
+  const float PITCH = .22, LINES = 35.;
 
   void main() {
-    vec2 p = vP;
-    float v = p.y / H;
+    vec2 p = vP.xy;
+    float side = vP.z;
+    if (side < .5 && abs(p.x) < ${COCKPIT.halfW.toFixed(2)} && p.y > ${COCKPIT.s0.toFixed(2)} && p.y < ${COCKPIT.s1.toFixed(2)}) discard;
+
+    float v = p.y / S;
     float halfw = W * (1. - v);
     float nx = p.x / max(halfw, .001);
-    float edge = max(halfw - abs(p.x), 0.) * ${(H / Math.hypot(H, W)).toFixed(4)}; // metres in from the frame
+    float q = min(p.y, (halfw - abs(p.x)) * EDGE) / INR; // 0 at the edge, 1 at the centre
 
-    // Lit from the tubes: brightest along the frame and the ledge, thin smoke between them.
-    float smoke = fbm(vec2(p.x * .1 + uTime * .03, p.y * .075 - uTime * .05));
-    float body = .13 + exp(-edge * .46) * .95 + exp(-abs(p.y - SHELF) * .34) * .32 + exp(-p.y * .28) * .3;
-    body *= .5 + 1.05 * smoke;
+    // The face is dark steel carrying concentric runs of LED tube, grouped in seven tiers.
+    float linePos = q * LINES;
+    float id = floor(linePos), lf = fract(linePos);
+    float tier = floor(id / 5.);
+    float aw = fwidth(linePos);
+    float thick = .24;
+    float tube = 1. - smoothstep(thick - aw, thick + aw, abs(lf - .5));
+    tube *= mod(id, 5.) < 4. ? 1. : 0.; // a gap between tiers
 
-    // The cue moves light through the smoke, softly: the frame stays the star.
-    float t = uT, pat = 0., m = 0.;
-    float q = min(p.y, edge) / 6.;
-    if (uProg == 0) {            // rings pulling inward
-      pat = pow(1. - fract(q - t * .25), 5.);
-    } else if (uProg == 1) {     // rising from the base with the groove
-      float lvl = uLevel * .9 + .05;
-      pat = smoothstep(lvl, lvl - .3, v);
-    } else if (uProg == 2) {     // the spectrum, bass in the middle
-      float a = texture2D(uSpec, vec2(abs(nx) * .75 + .01, .5)).r;
-      pat = smoothstep(a * 1.05, a * .5, v);
-      m = pat;
+    // along each tube: the angle around the centre of the face, and the diodes
+    float along = atan(p.y - INR, p.x) / 6.283185 + .5;
+    float dw = fwidth(p.x + p.y) / PITCH;
+    float diode = mix(.55 + .45 * smoothstep(.2, .05, abs(fract((p.x + p.y) / PITCH) - .5)), .72, clamp(dw, 0., 1.));
+    float run = .8 + .34 * hash(vec2(id, side + 1.));           // no two runs quite match
+
+    float t = uT + side * .5;
+    float i = 0., m = 0.;
+    float lineU = id / LINES;
+    if (uProg == 0) {            // rings of light travelling inward, one tier a beat
+      float f = fract(tier / 7. * 2. + lineU * .5 - t * .25);
+      i = pow(1. - f, 9.) * 1.6 + .018;
+      m = step(.86, fract(tier * .5 + .2));
+    } else if (uProg == 1) {     // the groove fills the pyramid from the base
+      float lvl = uLevel * .92 + .06;
+      i = smoothstep(lvl, lvl - .34, v) * .75 + smoothstep(.03, .0, abs(v - lvl)) * 1.8;
+      m = smoothstep(lvl - .12, lvl, v);
+    } else if (uProg == 2) {     // the spectrum, mirrored, bass in the middle reaching the top
+      float col = (floor(abs(p.x) / .5) + .5) * .5 / W;
+      float a = texture2D(uSpec, vec2(col * col * .9 + .004, .5)).r;
+      i = smoothstep(a * 1.04, a * .72, v) * (.2 + 1.1 * v / max(a, .06)) + smoothstep(.022, .0, abs(v - a)) * 1.8;
+      m = smoothstep(.55, 1., v / max(a, .06));
     } else if (uProg == 3) {     // a soft bar crossing on every beat
       float dir = mod(floor(t), 2.) * 2. - 1.;
-      pat = exp(-abs(nx - dir * (fract(t) * 2.5 - 1.25)) * 3.4);
-      m = pat;
-    } else if (uProg == 4) {     // cells of smoke firing at random
-      vec2 c = floor(p / vec2(2.6, 2.2));
-      pat = step(.72, hash(c + floor(t * 2.) * .37)) * (1. - fract(t * 2.) * .7);
-    } else {                     // a beam of light turning around the centre
-      float a = atan(p.y - H * .4, p.x) / 6.283185 + .5;
-      float f = fract(a - t * .125);
-      pat = pow(f, 5.) * smoothstep(1., .94, f);
-      m = pat;
+      float pos = dir * (fract(t) * 2.5 - 1.25);
+      float d = (nx - pos) * dir;
+      i = exp(-max(-d, 0.) * 3.2) * step(d, .02) * 1.4;
+      m = smoothstep(-.1, .02, d);
+    } else if (uProg == 4) {     // runs of tube firing at random, sixteenths
+      float tick = floor(t * 4.);
+      vec2 seg = vec2(floor(along * 40.), id);
+      float r = hash(seg * .73 + tick * .37 + side);
+      i = step(.8, r) * (1. - fract(t * 4.) * .75) * 1.5;
+      m = step(.95, r);
+    } else {                     // a comet running around the tiers
+      float sgn = mod(tier, 2.) * 2. - 1.;
+      float f = fract(along + tier * .13 * sgn - t * .25 * sgn);
+      i = pow(f, 7.) * 2.2;
+      m = step(.975, f);
     }
 
-    vec3 c = mix(uA, uB, m * .5) * body * (.46 + uKick * .84) * uGate * (1. + pat * 1.1) * 1.55;
-    c += mix(uA, vec3(1.), .4) * uHit * body * 1.1;
-    c += uA * uIdle * .035 * exp(-edge * .5);
+    float fade = .72 + .28 * sin(v * 3.1);
+    vec3 c = mix(uA, uB, m) * i * (.42 + uKick * .85) * uGate * 3.3 * run * diode * fade * tube;
+    c += vec3(1., .96, .9) * uHit * 2.4 * tube * diode;
+
+    // the unlit steel catches a little of the room; a sliver of it keeps the shape readable
+    c += (uA * .018 + .0035) * (.25 + uGlow) * (.5 + .5 * v);
+    // standby: only the tiers breathing, faintly
+    c += uA * uIdle * .05 * tube * step(mod(id, 10.), 3.) * (.55 + .45 * sin(uT * .9 - tier));
     gl_FragColor = vec4(c, 1.);
   }
 `;
 
-// A solid black mass: it only catches a little of the light from the ledge above it.
-const MASS_FRAG = /* glsl */`
-  uniform vec3 uA;
-  uniform float uGlow;
-  varying vec2 vUv;
-  void main() {
-    gl_FragColor = vec4(uA * uGlow * .05 * pow(vUv.y, 5.) + vec3(.0012), 1.);
-  }
-`;
+function pyramidGeometry() {
+  const faces = [
+    [[-W, 0, D], [W, 0, D], [0, H, 0]],   // front
+    [[-W, 0, -D], [-W, 0, D], [0, H, 0]], // left
+    [[W, 0, D], [W, 0, -D], [0, H, 0]],   // right
+  ];
+  const pos = [], face = [];
+  faces.forEach((f, id) => {
+    f.forEach((v, k) => {
+      pos.push(...v);
+      face.push(k === 0 ? -W : k === 1 ? W : 0, k === 2 ? SLOPE : 0, id);
+    });
+  });
+  const g = new BufferGeometry();
+  g.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3));
+  g.setAttribute('aFace', new BufferAttribute(new Float32Array(face), 3));
+  return g;
+}
 
-// A tube: the colour runs nearly white where it's hottest, and the bloom does the rest.
-const TUBE_FRAG = /* glsl */`
-  uniform vec3 uA;
-  uniform float uEdge, uHeat;
-  void main() {
-    gl_FragColor = vec4(mix(uA, vec3(1.), uHeat) * uEdge + vec3(.002), 1.);
-  }
-`;
-
-// The two of them are shadows against the haze. Each is a white-on-transparent mask, drawn from the
-// real outlines: the silver helmet is a dome over a wide visor band with ear pods, tapering to a
-// narrow jaw; the gold one is a big rounded egg with square ear panels.
-function maskTexture(w, h, paint) {
+// The cockpit: a booth let into the front face, lit from behind.
+function paintCanvas(w, h, paint) {
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
-  const g = c.getContext('2d');
-  g.fillStyle = '#fff';
-  paint(g);
+  paint(c.getContext('2d'));
   const t = new CanvasTexture(c);
   t.colorSpace = LinearSRGBColorSpace;
   t.generateMipmaps = true;
@@ -178,69 +210,191 @@ function maskTexture(w, h, paint) {
   return t;
 }
 
-const silverHead = () => maskTexture(512, 640, (g) => {
+const cockpitTexture = () => paintCanvas(1024, 512, (g) => {
+  g.fillStyle = '#000';
+  g.fillRect(0, 0, 1024, 512);
+  g.globalCompositeOperation = 'lighter';
+  for (const x of [286, 738]) {
+    const pool = g.createRadialGradient(x, 190, 10, x, 210, 250);
+    pool.addColorStop(0, '#fff');
+    pool.addColorStop(0.5, '#555');
+    pool.addColorStop(1, '#000');
+    g.fillStyle = pool;
+    g.fillRect(0, 0, 1024, 512);
+  }
+  g.globalCompositeOperation = 'source-over';
+  g.fillStyle = 'rgba(0,0,0,.5)';
+  for (let x = 0; x < 1024; x += 30) g.fillRect(x, 0, 2, 512);
+  for (let y = 0; y < 512; y += 30) g.fillRect(0, y, 1024, 2);
+});
+
+// The two helmets, front on, as a silhouette against the back wall with the metal catching light.
+// Each is drawn on a 512x640 canvas with the neck running off the bottom.
+const NECK = '#030304';
+
+// Silver: a smooth dome over a wide visor band, ear pods proud of the band, and a jaw that tapers
+// hard to a narrow chin piece.
+const silverHelmet = () => paintCanvas(512, 640, (g) => {
+  g.fillStyle = NECK;
   g.fillRect(208, 460, 96, 180);
+  const pod = (x) => {
+    const m = g.createLinearGradient(x, 0, x + 50, 0);
+    m.addColorStop(0, '#59606e');
+    m.addColorStop(0.5, '#dfe4ee');
+    m.addColorStop(1, '#3a3f4b');
+    g.fillStyle = m;
+    g.beginPath();
+    g.roundRect(x, 222, 50, 88, 18);
+    g.fill();
+    g.fillStyle = '#0a0b0e';
+    g.fillRect(x + 8, 262, 34, 6);
+  };
+  pod(56);
+  pod(406);
+  const shell = new Path2D();
+  shell.moveTo(92, 262);
+  shell.bezierCurveTo(96, 120, 170, 52, 256, 52);
+  shell.bezierCurveTo(342, 52, 416, 120, 420, 262);
+  shell.lineTo(412, 312);
+  shell.bezierCurveTo(392, 330, 368, 338, 352, 340);
+  shell.bezierCurveTo(336, 400, 312, 452, 288, 480);
+  shell.lineTo(224, 480);
+  shell.bezierCurveTo(200, 452, 176, 400, 160, 340);
+  shell.bezierCurveTo(144, 338, 120, 330, 100, 312);
+  shell.closePath();
+  const steel = g.createRadialGradient(256, 150, 20, 256, 220, 300);
+  steel.addColorStop(0, '#2b2e36');
+  steel.addColorStop(1, '#07080a');
+  g.fillStyle = steel;
+  g.fill(shell);
+  g.save();
+  g.clip(shell);
+  // the light across the dome
+  g.strokeStyle = 'rgba(235,240,250,.9)';
+  g.lineWidth = 26;
+  g.lineCap = 'round';
   g.beginPath();
-  g.roundRect(56, 222, 50, 88, 18);
-  g.roundRect(406, 222, 50, 88, 18);
-  g.fill();
+  g.arc(256, 214, 112, Math.PI * 1.2, Math.PI * 1.8);
+  g.stroke();
+  // the visor band, the widest and brightest thing on the helmet
+  const band = g.createLinearGradient(0, 222, 0, 318);
+  band.addColorStop(0, '#fbfcff');
+  band.addColorStop(0.55, '#bcc4d4');
+  band.addColorStop(1, '#23262e');
+  g.fillStyle = band;
   g.beginPath();
   g.moveTo(84, 236);
-  g.bezierCurveTo(96, 120, 170, 52, 256, 52);
-  g.bezierCurveTo(342, 52, 416, 120, 428, 236);
+  g.quadraticCurveTo(256, 196, 428, 236);
   g.lineTo(420, 318);
-  g.bezierCurveTo(392, 332, 368, 338, 352, 340);
-  g.bezierCurveTo(336, 400, 312, 452, 288, 480);
-  g.lineTo(224, 480);
-  g.bezierCurveTo(200, 452, 176, 400, 160, 340);
-  g.bezierCurveTo(144, 338, 120, 332, 92, 318);
+  g.quadraticCurveTo(256, 346, 92, 318);
   g.closePath();
   g.fill();
+  g.restore();
+  // the chin piece
+  const chin = g.createLinearGradient(226, 0, 286, 0);
+  chin.addColorStop(0, '#7b8290');
+  chin.addColorStop(0.5, '#f2f4f9');
+  chin.addColorStop(1, '#6a707d');
+  g.fillStyle = chin;
+  g.beginPath();
+  g.moveTo(218, 352);
+  g.lineTo(294, 352);
+  g.lineTo(274, 470);
+  g.lineTo(238, 470);
+  g.closePath();
+  g.fill();
+  g.fillStyle = '#0a0b0e';
+  for (let x = 240; x <= 266; x += 13) g.fillRect(x, 368, 5, 88);
 });
 
-const goldHead = () => maskTexture(512, 640, (g) => {
+// Gold: one great rounded black visor in a gold frame, with square ear panels.
+const goldHelmet = () => paintCanvas(512, 640, (g) => {
+  g.fillStyle = NECK;
   g.fillRect(204, 470, 104, 170);
+  const shell = new Path2D();
+  shell.moveTo(256, 44);
+  shell.bezierCurveTo(374, 44, 438, 140, 438, 262);
+  shell.bezierCurveTo(438, 362, 386, 456, 294, 486);
+  shell.lineTo(218, 486);
+  shell.bezierCurveTo(126, 456, 74, 362, 74, 262);
+  shell.bezierCurveTo(74, 140, 138, 44, 256, 44);
+  shell.closePath();
+  g.fillStyle = '#050403';
+  g.fill(shell);
+  g.save();
+  g.clip(shell);
+  // the frame around the visor
+  const frame = g.createLinearGradient(0, 40, 0, 490);
+  frame.addColorStop(0, '#fff0b4');
+  frame.addColorStop(0.45, '#e0a433');
+  frame.addColorStop(1, '#8f5f14');
+  g.strokeStyle = frame;
+  g.lineWidth = 30;
+  g.stroke(shell);
+  // a soft window reflection high on the visor
+  const glass = g.createRadialGradient(200, 130, 10, 200, 130, 150);
+  glass.addColorStop(0, 'rgba(255,255,255,.62)');
+  glass.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = glass;
   g.beginPath();
-  g.roundRect(46, 216, 48, 128, 7);
-  g.roundRect(418, 216, 48, 128, 7);
+  g.ellipse(200, 130, 150, 74, -0.45, 0, TAU);
   g.fill();
+  g.restore();
+  const panel = (x, dir) => {
+    const m = g.createLinearGradient(x, 0, x + 48, 0);
+    m.addColorStop(0, '#a87318');
+    m.addColorStop(0.5, '#ffd978');
+    m.addColorStop(1, '#a87318');
+    g.fillStyle = m;
+    g.beginPath();
+    g.roundRect(x, 216, 48, 128, 7);
+    g.fill();
+    g.strokeStyle = '#2a1a05';
+    g.lineWidth = 6;
+    g.beginPath();
+    g.moveTo(x + 24 - dir * 12, 234);
+    g.lineTo(x + 24 + dir * 12, 234);
+    g.lineTo(x + 24 + dir * 12, 280);
+    g.lineTo(x + 24 - dir * 12, 280);
+    g.lineTo(x + 24 - dir * 12, 326);
+    g.lineTo(x + 24 + dir * 12, 326);
+    g.stroke();
+  };
+  panel(46, 1);
+  panel(418, -1);
+  g.fillStyle = frame;
   g.beginPath();
-  g.moveTo(256, 44);
-  g.bezierCurveTo(374, 44, 438, 140, 438, 262);
-  g.bezierCurveTo(438, 362, 386, 456, 294, 486);
-  g.lineTo(218, 486);
-  g.bezierCurveTo(126, 456, 74, 362, 74, 262);
-  g.bezierCurveTo(74, 140, 138, 44, 256, 44);
-  g.closePath();
+  g.roundRect(214, 470, 84, 18, 8);
   g.fill();
 });
 
-// Shoulders and chest down to the ledge.
-const torso = () => maskTexture(768, 604, (g) => {
+// Shoulders in a dark jacket, with the odd sequin catching the light.
+const jacket = (sequin, seed) => paintCanvas(768, 384, (g) => {
+  g.fillStyle = NECK;
   g.beginPath();
-  g.moveTo(96, 604);
-  g.bezierCurveTo(92, 420, 62, 300, 124, 226);
-  g.bezierCurveTo(156, 190, 262, 176, 318, 104);
-  g.lineTo(450, 104);
-  g.bezierCurveTo(506, 176, 612, 190, 644, 226);
-  g.bezierCurveTo(706, 300, 676, 420, 672, 604);
+  g.moveTo(40, 384);
+  g.bezierCurveTo(44, 200, 110, 120, 290, 76);
+  g.lineTo(478, 76);
+  g.bezierCurveTo(658, 120, 724, 200, 728, 384);
   g.closePath();
   g.fill();
-});
-
-const FIGURE_FRAG = /* glsl */`
-  uniform sampler2D uMap;
-  uniform vec3 uA;
-  uniform float uLight;
-  varying vec2 vUv;
-  void main() {
-    float a = smoothstep(.3, .62, texture2D(uMap, vUv).a);
-    if (a < .02) discard;
-    // only a thread of light where the haze wraps the top edge
-    float above = texture2D(uMap, vUv + vec2(0., .012)).a;
-    gl_FragColor = vec4(vec3(.0016) + uA * smoothstep(.9, 1., a) * (1. - above) * uLight * .35, a);
+  const r = rng(seed);
+  g.fillStyle = sequin;
+  for (let i = 0; i < 150; i++) {
+    const side = r() < 0.5 ? -1 : 1, u = r();
+    const x = 384 + side * (110 + u * 270), y = 112 + u * u * 150 + r() * 120;
+    g.globalAlpha = 0.25 + r() * 0.75;
+    g.fillRect(x, y, 4, 4);
   }
-`;
+});
+
+const deskTexture = () => paintCanvas(1024, 96, (g) => {
+  g.fillStyle = '#040405';
+  g.fillRect(0, 0, 1024, 96);
+  g.fillStyle = '#fff';
+  const r = rng(5);
+  for (let x = 60; x < 964; x += 9) { g.globalAlpha = r() * r() * 0.6; g.fillRect(x, 14 + Math.floor(r() * 4) * 8, 3, 2); }
+});
 
 // ---------- the audience ----------
 const CROWD_POSES = 8;
@@ -337,6 +491,17 @@ const CROWD_FRAG = /* glsl */`
   }
 `;
 
+const FIGURE_FRAG = /* glsl */`
+  uniform sampler2D uMap;
+  uniform float uLight;
+  varying vec2 vUv;
+  void main() {
+    vec4 t = texture2D(uMap, vUv);
+    if (t.a < .03) discard;
+    gl_FragColor = vec4(t.rgb * (.22 + uLight * 1.5), t.a);
+  }
+`;
+
 // ---------- light ----------
 const BEAM_VERT = /* glsl */`
   attribute vec3 aColor;
@@ -409,7 +574,7 @@ const BACK_FRAG = /* glsl */`
     vec2 p = (vUv - vec2(.5, .34)) * vec2(2.3, 1.4);
     float g = exp(-dot(p, p) * 3.2);
     float s = fbm(vUv * vec2(5., 3.) + vec2(uTime * .012, -uTime * .02));
-    vec3 c = uA * uGlow * g * (.006 + .04 * s * s) + vec3(.0016, .0018, .0032) * (.5 + s);
+    vec3 c = uA * uGlow * g * (.012 + .1 * s * s) + vec3(.0016, .0018, .0032) * (.5 + s);
     gl_FragColor = vec4(c, 1.);
   }
 `;
@@ -423,7 +588,7 @@ const FLOOR_FRAG = /* glsl */`
     vec2 p = (vUv - .5) * 2.;
     float streak = exp(-p.x * p.x * 20.) * exp(-abs(p.y + .25) * 3.);
     float r = .6 + .6 * noise(vUv * vec2(90., 26.));
-    gl_FragColor = vec4(uA * uGlow * streak * r * .16 + vec3(.0012), 1.);
+    gl_FragColor = vec4(uA * uGlow * streak * r * .07 + vec3(.0012), 1.);
   }
 `;
 
@@ -518,7 +683,7 @@ const FINAL_FRAG = /* glsl */`
     vec3 col = vec3(texture2D(uTex, vUv + ca).r, texture2D(uTex, vUv).g, texture2D(uTex, vUv - ca).b);
     vec3 bloom = texture2D(uBloom, vUv).rgb;
     vec3 streak = texture2D(uStreak, vUv).rgb;
-    col += bloom * .3 + streak * vec3(.05, .06, .1);
+    col += bloom * .2 + streak * vec3(.05, .06, .1);
     col *= uTint * uExposure;
     col *= 1. - smoothstep(.1, .62, r2) * .62;
     col = filmic(col);
@@ -573,94 +738,96 @@ export function createPyramid(canvas, getFrame) {
   floor.position.set(0, 0, 12);
   scene.add(floor);
 
-  // the pyramid, front on, in layers from the back: haze, capstone, the two of them, the lower
-  // mass, then the tubes
+  // the pyramid
   const faceU = {
-    uA: shared.uA, uB: shared.uB, uT: shared.uT, uTime: shared.uTime, uKick: shared.uKick, uSpec: { value: specTex },
-    uLevel: { value: 0 }, uHit: { value: 0 }, uGate: { value: 0 }, uIdle: { value: 1 }, uProg: { value: 0 },
+    uA: shared.uA, uB: shared.uB, uT: shared.uT, uKick: shared.uKick, uGlow: shared.uGlow, uSpec: { value: specTex },
+    uLevel: { value: 0 }, uHit: { value: 0 }, uGate: { value: 0 }, uIdle: { value: 1 }, uProg: { value: 0 }, uRes: { value: 1 },
   };
-  const flat = (points) => {
-    const g = new BufferGeometry();
-    const ys = points.map((p) => p[1]), lo = Math.min(...ys), hi = Math.max(...ys);
-    g.setAttribute('position', new BufferAttribute(new Float32Array(points.flat()), 3));
-    g.setAttribute('uv', new BufferAttribute(new Float32Array(points.flatMap((p) => [0, (p[1] - lo) / (hi - lo)])), 2));
-    return g;
-  };
-  const halfAt = (y) => W * (1 - (y - Y0) / H);
-  const quad = (a, b, c, d) => [a, b, c, a, c, d];
-  const apex = Y0 + H;
+  const pyramid = new Mesh(pyramidGeometry(), new ShaderMaterial({ vertexShader: FACE_VERT, fragmentShader: FACE_FRAG, uniforms: faceU, side: FrontSide }));
+  scene.add(pyramid);
+  scene.add(new Mesh(pyramid.geometry, new ShaderMaterial({ vertexShader: BACK_VERT, fragmentShader: 'void main() { gl_FragColor = vec4(0., 0., 0., 1.); }', side: BackSide })));
 
-  scene.add(new Mesh(flat([[-W, Y0, 0], [W, Y0, 0], [0, apex, 0]]), new ShaderMaterial({ vertexShader: HAZE_VERT, fragmentShader: HAZE_FRAG, uniforms: faceU })));
-
-  const massMat = new ShaderMaterial({ vertexShader: BACK_VERT, fragmentShader: MASS_FRAG, uniforms: { uA: shared.uA, uGlow: shared.uGlow } });
-  const shelfY = Y0 + SHELF;
-  const massTop = halfAt(shelfY) * 0.76, massBase = W * 0.94;
-  scene.add(new Mesh(flat(quad([-massBase, Y0 + 0.3, 1.2], [massBase, Y0 + 0.3, 1.2], [massTop, shelfY, 1.2], [-massTop, shelfY, 1.2])), massMat));
-
-  // the capstone: dark, with a skirt wider than its shoulders
-  const capTip = Y0 + H * 0.86, capShoulder = Y0 + H * 0.69, capSkirt = Y0 + H * 0.64;
-  scene.add(new Mesh(flat([[-2.3, capShoulder, 0.5], [2.3, capShoulder, 0.5], [0, capTip, 0.5]]), massMat));
-  scene.add(new Mesh(flat(quad([-3.1, capSkirt, 0.5], [3.1, capSkirt, 0.5], [2.3, capShoulder, 0.5], [-2.3, capShoulder, 0.5])), massMat));
-
-  const tubeU = { uA: shared.uA, uEdge: { value: 0 }, uHeat: { value: 0.07 } };
-  const thinU = { uA: shared.uA, uEdge: { value: 0 }, uHeat: { value: 0.16 } };
-  const tubeMat = new ShaderMaterial({ vertexShader: BACK_VERT, fragmentShader: TUBE_FRAG, uniforms: tubeU });
-  const thinMat = new ShaderMaterial({ vertexShader: BACK_VERT, fragmentShader: TUBE_FRAG, uniforms: thinU });
-  const unitBox = new BoxGeometry(1, 1, 1);
+  // edges of the pyramid: steel with a run of LEDs
+  const edgeMat = new ShaderMaterial({
+    vertexShader: STRIP_VERT.replace('modelMatrix * instanceMatrix', 'modelMatrix'), fragmentShader: /* glsl */`
+      uniform vec3 uA; uniform float uEdge; void main() { gl_FragColor = vec4(uA * uEdge * 2.4 + vec3(.0025), 1.); }`,
+    uniforms: { uA: shared.uA, uEdge: { value: 0 }, uBoxes: { value: 0 } },
+  });
+  const edgeGeo = new BoxGeometry(0.09, 1, 0.09);
+  edgeGeo.setAttribute('aTower', new BufferAttribute(new Float32Array(edgeGeo.attributes.position.count), 1));
   const up = new Vector3(0, 1, 0);
-  const tube = (a, b, thick, mat) => {
-    const m = new Mesh(unitBox, mat);
+  const placeEdge = (a, b) => {
+    const m = new Mesh(edgeGeo, edgeMat);
     const A = new Vector3(...a), B = new Vector3(...b);
     m.position.copy(A).add(B).multiplyScalar(0.5);
-    m.scale.set(thick, A.distanceTo(B), thick);
+    m.scale.y = A.distanceTo(B);
     m.quaternion.setFromUnitVectors(up, B.clone().sub(A).normalize());
     scene.add(m);
   };
-  // the frame, with a thin second line just outside it
-  tube([-W, Y0, 1.5], [0, apex, 1.5], 0.42, tubeMat);
-  tube([W, Y0, 1.5], [0, apex, 1.5], 0.42, tubeMat);
-  tube([-W - 1.5, Y0, 0.8], [0, apex + 1.9, 0.8], 0.09, thinMat);
-  tube([W + 1.5, Y0, 0.8], [0, apex + 1.9, 0.8], 0.09, thinMat);
-  // the ledge: two bars with a gap between them, the brightest thing on stage
-  tube([-massTop - 0.9, shelfY, 1.7], [-0.24, shelfY + 0.34, 1.7], 0.34, tubeMat);
-  tube([massTop + 0.9, shelfY, 1.7], [0.24, shelfY + 0.34, 1.7], 0.34, tubeMat);
-  // the capstone's lit edges
-  tube([-3.1, capSkirt, 0.7], [3.1, capSkirt, 0.7], 0.09, thinMat);
-  tube([-3.1, capSkirt, 0.7], [-2.3, capShoulder, 0.7], 0.07, thinMat);
-  tube([3.1, capSkirt, 0.7], [2.3, capShoulder, 0.7], 0.07, thinMat);
-  // the platform under it all
-  tube([-W - 0.6, Y0, 1.9], [W + 0.6, Y0, 1.9], 0.3, tubeMat);
-  tube([-W - 2.4, 0.78, 2.6], [-1.3, 0.78, 2.6], 0.13, thinMat);
-  tube([W + 2.4, 0.78, 2.6], [1.3, 0.78, 2.6], 0.13, thinMat);
-  tube([-W - 3.4, 0.3, 3.2], [W + 3.4, 0.3, 3.2], 0.08, thinMat);
+  placeEdge([-W, 0, D], [0, H, 0]);
+  placeEdge([W, 0, D], [0, H, 0]);
+  placeEdge([-W, 0, -D], [0, H, 0]);
+  placeEdge([W, 0, -D], [0, H, 0]);
+  placeEdge([-W, 0.08, D], [W, 0.08, D]);
 
-  // the two of them on the ledge: the heads pivot at the neck so they can nod
-  const cockU = { uA: shared.uA, uLight: { value: 0.1 } };
-  const figureMat = (map) => new ShaderMaterial({
-    vertexShader: BACK_VERT, fragmentShader: FIGURE_FRAG, transparent: true, depthWrite: false,
-    uniforms: { uMap: { value: map }, uA: shared.uA, uLight: cockU.uLight },
-  });
+  // the cockpit
+  const cockY = (COCKPIT.s0 + COCKPIT.s1) * 0.5 * (H / SLOPE);
+  const cockH = (COCKPIT.s1 - COCKPIT.s0) * (H / SLOPE);
+  const cockZ = D * (1 - cockY / H);
+  const cockU = { uMap: { value: cockpitTexture() }, uA: shared.uA, uB: shared.uB, uLight: { value: 0.1 } };
   // nodFrom: where in the beat this one's head goes down. They're never quite together.
   const performers = [
-    { x: -1.6, helmet: silverHead(), lean: -0.06, nodFrom: 0 },
-    { x: 1.6, helmet: goldHead(), lean: 0.05, nodFrom: 0.035 },
+    { x: -1.5, helmet: silverHelmet(), jacket: jacket('#dfe6f4', 3), lean: 0.03, nodFrom: 0 },
+    { x: 1.5, helmet: goldHelmet(), jacket: jacket('#ffd67a', 9), lean: -0.025, nodFrom: 0.035 },
   ];
-  const torsoMap = torso();
+  const cockpit = new Mesh(new PlaneGeometry(COCKPIT.halfW * 2 + 0.6, cockH + 1.3), new ShaderMaterial({
+    vertexShader: BACK_VERT,
+    fragmentShader: /* glsl */`
+      uniform sampler2D uMap; uniform vec3 uA, uB; uniform float uLight; varying vec2 vUv;
+      void main() {
+        vec3 warm = mix(uA, vec3(1.), .4);
+        gl_FragColor = vec4(warm * texture2D(uMap, vUv).r * (.04 + uLight * .42), 1.);
+      }`,
+    uniforms: cockU,
+  }));
+  cockpit.position.set(0, cockY, cockZ - 4.6);
+  scene.add(cockpit);
+  // the booth's walls, black: they stop the faces being seen through the opening
+  const boothBox = new Mesh(new BoxGeometry(COCKPIT.halfW * 2 + 1.2, cockH + 0.6, 4.4), new ShaderMaterial({
+    vertexShader: BACK_VERT, side: BackSide,
+    fragmentShader: /* glsl */`uniform vec3 uA; uniform float uLight; void main() { gl_FragColor = vec4(uA * uLight * .03, 1.); }`,
+    uniforms: cockU,
+  }));
+  boothBox.position.set(0, cockY, cockZ - 3.98);
+  scene.add(boothBox);
+
+  // the two of them, behind the desk: the heads pivot at the neck so they can nod
+  const figureZ = cockZ - 3;
+  const figureMat = (map) => new ShaderMaterial({
+    vertexShader: BACK_VERT, fragmentShader: FIGURE_FRAG, transparent: true, depthWrite: false,
+    uniforms: { uMap: { value: map }, uLight: cockU.uLight },
+  });
   performers.forEach((p) => {
-    p.body = new Mesh(new PlaneGeometry(3.5, 2.75), figureMat(torsoMap));
-    p.body.position.set(p.x, shelfY + 1.36, 0.9);
+    p.body = new Mesh(new PlaneGeometry(2.6, 1.3), figureMat(p.jacket));
+    p.body.position.set(p.x, cockY - 0.62, figureZ);
     p.body.renderOrder = 1;
     p.bodyY = p.body.position.y;
     scene.add(p.body);
-    const face = new Mesh(new PlaneGeometry(1.84, 2.3), figureMat(p.helmet));
-    face.position.y = 1.15;
+    const face = new Mesh(new PlaneGeometry(1.36, 1.7), figureMat(p.helmet));
+    face.position.y = 0.85;
     face.renderOrder = 2;
     p.head = new Object3D();
-    p.head.position.set(p.x * 0.96, shelfY + 1.62, 0.95);
+    p.head.position.set(p.x, cockY - 0.42, figureZ + 0.05);
     p.neckY = p.head.position.y;
     p.head.add(face);
     scene.add(p.head);
   });
+  const desk = new Mesh(new PlaneGeometry(COCKPIT.halfW * 2 + 1, 1.3), new ShaderMaterial({
+    vertexShader: BACK_VERT, fragmentShader: FIGURE_FRAG,
+    uniforms: { uMap: { value: deskTexture() }, uLight: cockU.uLight },
+  }));
+  desk.position.set(0, cockY - 1.5, figureZ + 0.9);
+  scene.add(desk);
 
   // side towers
   const towers = [[-23, 13], [23, 13], [-29.5, 16.5], [29.5, 16.5], [-36, 11], [36, 11]];
@@ -671,7 +838,7 @@ export function createPyramid(canvas, getFrame) {
   const towerIndex = new Float32Array(towers.length);
   const dummy = new Object3D();
   towers.forEach(([x, h], i) => {
-    dummy.position.set(x, h / 2, -2);
+    dummy.position.set(x, h / 2, 4);
     dummy.scale.set(1.5, h, 0.5);
     dummy.quaternion.identity();
     dummy.updateMatrix();
@@ -686,13 +853,13 @@ export function createPyramid(canvas, getFrame) {
   const truss = new Mesh(new BoxGeometry(84, 0.9, 0.9), new ShaderMaterial({
     vertexShader: BACK_VERT, fragmentShader: `void main() { gl_FragColor = vec4(.003, .003, .004, 1.); }`,
   }));
-  truss.position.set(0, 34.6, -3);
+  truss.position.set(0, 24.2, 6);
   scene.add(truss);
 
   // moving heads: eight on the truss, six on the floor
   const heads = [];
-  for (let i = 0; i < 8; i++) heads.push({ pos: new Vector3(-31.5 + i * 9, 34, -3), top: true, side: i < 4 ? -1 : 1, i, yaw: 0, pitch: 0.6, power: 0 });
-  for (let i = 0; i < 6; i++) heads.push({ pos: new Vector3(-24 + i * 9.6, 0.5, 5), top: false, side: i < 3 ? -1 : 1, i, yaw: 0, pitch: 0.6, power: 0 });
+  for (let i = 0; i < 8; i++) heads.push({ pos: new Vector3(-31.5 + i * 9, 23.6, 6), top: true, side: i < 4 ? -1 : 1, i, yaw: 0, pitch: 0.6, power: 0 });
+  for (let i = 0; i < 6; i++) heads.push({ pos: new Vector3(-24 + i * 9.6, 0.5, D + 1.5), top: false, side: i < 3 ? -1 : 1, i, yaw: 0, pitch: 0.6, power: 0 });
   const BEAM_LEN = 74;
   const beamGeo = new CylinderGeometry(0.14, 2.3, BEAM_LEN, 28, 1, true);
   beamGeo.translate(0, -BEAM_LEN / 2, 0);
@@ -714,7 +881,7 @@ export function createPyramid(canvas, getFrame) {
   const lensColor = new Vector3();
   const lens = new Points(lensGeo, new ShaderMaterial({
     vertexShader: AIR_VERT, fragmentShader: AIR_FRAG, ...light,
-    uniforms: { uTime: { value: 0 }, uScale: { value: 300 }, uDrift: { value: 0 }, uColor: { value: lensColor } },
+    uniforms: { uTime: { value: 0 }, uScale: { value: 620 }, uDrift: { value: 0 }, uColor: { value: lensColor } },
   }));
   lens.frustumCulled = false;
   scene.add(lens);
@@ -739,7 +906,7 @@ export function createPyramid(canvas, getFrame) {
   const dustCount = low ? 350 : 800;
   const dustPos = new Float32Array(dustCount * 3), dustSeed = new Float32Array(dustCount * 2);
   for (let i = 0; i < dustCount; i++) {
-    dustPos.set([(rand() - 0.5) * 80, rand() * 26, -6 + rand() * 56], i * 3);
+    dustPos.set([(rand() - 0.5) * 80, rand() * 26, -6 + rand() * 44], i * 3);
     dustSeed.set([rand(), rand()], i * 2);
   }
   const dustGeo = new BufferGeometry();
@@ -756,8 +923,8 @@ export function createPyramid(canvas, getFrame) {
   // the audience: rows of cut-outs, thickening toward the camera
   const crowdPlaces = [];
   const crowdRand = rng(7);
-  for (let z = 40; z < 50; z += 0.85) {
-    const near = (z - 40) / 10;
+  for (let z = 24; z < 39; z += 0.85) {
+    const near = (z - 24) / 15;
     const n = Math.round(mix(30, 13, near)) * (low ? 0.7 : 1);
     for (let i = 0; i < n; i++) {
       crowdPlaces.push([(i + crowdRand() * 0.8 - n / 2) * mix(2.7, 1.5, near) * (1 + 0.1 * crowdRand()), z + crowdRand() * 0.5, 0.86 + crowdRand() * 0.2]);
@@ -770,13 +937,13 @@ export function createPyramid(canvas, getFrame) {
   const crowdU = { uMap: { value: crowdTexture() }, uRim: { value: new Vector3() }, uKick: shared.uKick, uT: shared.uT, uLevel: { value: 0 } };
   const crowd = new InstancedMesh(crowdGeo, new ShaderMaterial({ vertexShader: CROWD_VERT, fragmentShader: CROWD_FRAG, uniforms: crowdU, transparent: true, depthWrite: false }), crowdPlaces.length);
   crowdPlaces.forEach(([x, z, s], i) => {
-    dummy.position.set(x, -0.5, z);
+    dummy.position.set(x, 0, z);
     dummy.scale.set(s * 1.75, s * 1.72, 1);
     dummy.quaternion.identity();
     dummy.updateMatrix();
     crowd.setMatrixAt(i, dummy.matrix);
     const pose = Math.floor(crowdRand() * CROWD_POSES);
-    crowdInst.setXYZ(i, pose, crowdRand() * TAU, 1 - (z - 40) / 10);
+    crowdInst.setXYZ(i, pose, crowdRand() * TAU, 1 - (z - 24) / 15);
   });
   crowd.frustumCulled = false;
   crowd.renderOrder = 5;
@@ -786,7 +953,7 @@ export function createPyramid(canvas, getFrame) {
   const phoneCount = low ? 40 : 90;
   const phonePos = new Float32Array(phoneCount * 3), phoneSeed = new Float32Array(phoneCount * 2);
   for (let i = 0; i < phoneCount; i++) {
-    phonePos.set([(rand() - 0.5) * 72, 2.2 + rand() * 0.6, 40 + rand() * 9], i * 3);
+    phonePos.set([(rand() - 0.5) * 72, 2.6 + rand() * 0.7, 24 + rand() * 16], i * 3);
     phoneSeed.set([rand(), rand()], i * 2);
   }
   const phoneGeo = new BufferGeometry();
@@ -795,7 +962,7 @@ export function createPyramid(canvas, getFrame) {
   const phoneColor = new Vector3();
   const phones = new Points(phoneGeo, new ShaderMaterial({
     vertexShader: AIR_VERT, fragmentShader: AIR_FRAG, ...light,
-    uniforms: { uTime: shared.uTime, uScale: { value: 46 }, uDrift: { value: 0.1 }, uColor: { value: phoneColor } },
+    uniforms: { uTime: shared.uTime, uScale: { value: 150 }, uDrift: { value: 0.1 }, uColor: { value: phoneColor } },
   }));
   phones.frustumCulled = false;
   scene.add(phones);
@@ -945,7 +1112,7 @@ export function createPyramid(canvas, getFrame) {
       const sweep = Math.sin(t * Math.PI * 0.25) * 0.3;
       dir.set(Math.sin(u * 2.1 + sweep), 0.015 + 0.07 * Math.sin(t * 1.57 + i), Math.cos(u * 2.1 + sweep)).normalize();
       q.setFromUnitVectors(down, dir);
-      dummy.position.set(0, Y0 + H + 0.2, 1.5);
+      dummy.position.set(0, H + 0.15, 0.05);
       dummy.quaternion.copy(q);
       dummy.updateMatrix();
       lasers.setMatrixAt(i, dummy.matrix);
@@ -1061,9 +1228,7 @@ export function createPyramid(canvas, getFrame) {
     shared.uT.value = reduced ? time * 0.25 : T;
     shared.uTime.value = time;
     shared.uKick.value = kick;
-    const others = clamp01(pres.lead + pres.texture);
-    tubeU.uEdge.value = (g * (0.85 + kick * 1.3) + others * 0.3) * gate + hit * g * 2 + faceU.uIdle.value * 0.05;
-    thinU.uEdge.value = (g * (0.34 + kick * 0.4) + others * 0.14) * gate + faceU.uIdle.value * 0.025;
+    edgeMat.uniforms.uEdge.value = g * gate * (0.08 + kick * 0.5) + hit * g * 0.6 + faceU.uIdle.value * 0.012;
 
     const room = (0.25 + kick * 0.75) * g + pres.lead * level.lead * 0.5 + pres.texture * 0.1;
     glow = approach(glow, room * gate, dt, 30, 6);
@@ -1076,9 +1241,9 @@ export function createPyramid(canvas, getFrame) {
     performers.forEach((p, i) => {
       const n = nodShape((m.beat - p.nodFrom + 1) % 1) * nodDepth;
       p.head.rotation.x = n * 0.5;
-      p.head.position.y = p.neckY - n * 0.38;
+      p.head.position.y = p.neckY - n * 0.3;
       p.head.rotation.z = p.lean + Math.sin(T * Math.PI * 0.5 + i * 2) * 0.045 * nodDepth;
-      p.body.position.y = p.bodyY - n * 0.09;
+      p.body.position.y = p.bodyY - n * 0.07;
     });
 
     const beamPw = pres.lead * (0.2 + level.lead * 0.9) * gate * (1 - fxAmt * 0.3) * 0.62;
@@ -1098,6 +1263,7 @@ export function createPyramid(canvas, getFrame) {
 
     finalMat.uniforms.uExposure.value = 1.02 - fxAmt * 0.22 + hit * g * 0.15;
     placeCamera(f, dt, reduced);
+    faceU.uRes.value = h;
   }
 
   // Keep the page responsive: if frames run long, render fewer pixels.
