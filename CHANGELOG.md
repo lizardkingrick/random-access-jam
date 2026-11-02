@@ -2,9 +2,11 @@
 
 ## Unreleased
 
-- Background is a plain starry night sky for now, while a new music visualizer is designed. The old
-  stage (dome, light strands, floating objects) and the helmet holograms are gone (the helmet models
-  were game assets). The visualizer hook is documented at the top of js/stage.js
+- New stage: a neon pyramid with its top cut off and the duo in the gap, bopping their heads on the
+  beat. Each layer drives part of the light show, cues change every 8 bars and the groove's album
+  picks the palette. Devices without a real GPU fall back to a starry night sky. The old stage (dome,
+  light strands, floating objects) and the helmet holograms are gone (the helmet models were game
+  assets)
 - Empty slots on the wheel no longer show a faint outline inside their edge
 - Song titles on the wheel always fit inside their segment ("Around The World" ran into the rim on
   Homework, and two longer titles touched the centre circle)

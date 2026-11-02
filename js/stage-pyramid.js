@@ -13,7 +13,7 @@
 
 import {
   AdditiveBlending, BoxGeometry, BufferAttribute, CustomBlending, OneMinusSrcAlphaFactor, SrcAlphaFactor, ZeroFactor, BufferGeometry, CanvasTexture, CylinderGeometry, DataTexture,
-  FloatType, FrontSide, HalfFloatType, InstancedBufferAttribute, InstancedMesh, LinearFilter, LinearMipmapLinearFilter,
+  FrontSide, HalfFloatType, InstancedBufferAttribute, InstancedMesh, LinearFilter, LinearMipmapLinearFilter,
   LinearSRGBColorSpace, Mesh, NoToneMapping, Object3D, OrthographicCamera, PerspectiveCamera, PlaneGeometry, Points,
   Quaternion, RedFormat, RGBAFormat, BackSide, Scene, ShaderMaterial, UnsignedByteType, Vector2, Vector3,
   WebGLRenderer, WebGLRenderTarget,

@@ -22,9 +22,10 @@ there is no account and no install.
   Random Access Memories and the Weeknd collaborations.
 - **Audio FX (hold).** Pick one of six effects and hold `F` to play it: Stutter (repeats the last eighth note,
   chopped), Low-pass and High-pass sweeps, Phaser, Wah, and Tape stop. Letting go snaps back in time.
-- **Background.** A starry night sky for now; a new music visualizer is in the works. The hook a
-  visualizer plugs into (what it gets each frame: levels, spectrum, beat, layout) is documented at
-  the top of `js/stage.js`.
+- **Stage.** A neon pyramid concert behind the interface, with the duo bopping their heads in time.
+  Each layer you add brings in more of the light show, a new cue lands every 8 bars, and the groove's
+  album picks the colours. Devices without a real GPU get a starry night sky instead. What the stage
+  gets each frame (levels, spectrum, beat, layout) is documented at the top of `js/stage.js`.
 - **Local extras.** When you run it locally next to the extra rips, the wheel gets an
   **Instrument Guns** page (each song's backing track, melody gun and rhythm gun as Groove,
   Lead and Extra).
@@ -147,7 +148,10 @@ To undo a bad release, roll back to the previous version in the Cloudflare dashb
 | `js/stretch-worker.js` | WSOLA time-stretch and pitch-shift (MuscularCrab) |
 | `js/manifest.js` | Song catalogue; builds the song list from a local folder listing |
 | `js/wheel.js` | SVG radial song wheel |
-| `js/stage.js` | Canvas background (placeholder starfield; the visualizer hook is documented at the top) |
+| `js/stage.js` | Picks the background: the pyramid stage, or a starfield fallback (the stage contract is documented at the top) |
+| `js/stage-pyramid.js` | The pyramid stage: Three.js scene, shaders, cue sequencer, camera shots, post-processing |
+| `js/figures/` | Head and body silhouettes for the two figures (built by `tools/build-figures.py`) |
+| `js/vendor/three.min.js` | Trimmed Three.js bundle (rebuilt by `tools/build-three.mjs`) |
 | `js/catalog.js` | Album pages, album badge art, layer icons |
 | `js/main.js` | UI wiring, keyboard and gamepad input, share links |
 | `js/version.js` | App version |
@@ -155,6 +159,8 @@ To undo a bad release, roll back to the previous version in the Cloudflare dashb
 | `tools/deploy.mjs` | Builds `dist/` and deploys it with Wrangler |
 | `wrangler.jsonc` | Cloudflare config: Worker name, assets folder, custom domain |
 | `serve.mjs` | Zero-dependency local dev server (Node) |
+| `tools/serve-live.mjs` | Local dev server that streams the stems and covers from the live site |
+| `tools/stage-lab.html` | Stage preview driven by a simulated song (no audio needed) |
 | `start.cmd`, `tools/serve.ps1` | Windows local server: no installs, plays the WAVs straight from your folders |
 | `tools/allow-lan.ps1` | One-time admin setup for `start.cmd -Lan` (port reservation + local-subnet firewall rule) |
 | `_headers` | Cache rules for the hosted site |
