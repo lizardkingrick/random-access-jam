@@ -12,10 +12,14 @@
   scrollbar: it fits the height, down to a phone with the browser's bars showing. Small phones
   turned sideways (667x375, 568x320) used to get the portrait layout squeezed sideways and now get
   this one. The stage centres the pyramid on the whole screen when there's no gap between the panels
-- Phones held upright fit the whole jam on one screen: the layers are three tiles side by side
-  under the albums, tempo, key and the Audio FX button share a row with the effects underneath,
-  and the wheel shrinks a little on shorter phones instead of pushing the controls off screen.
+- Phones held upright fit the whole jam on one screen, with the browser's bars showing or opened
+  from the home screen: the layers are three tiles side by side under the albums, tempo, key and
+  the Audio FX button share a row with the effects underneath, and the wheel takes whatever height
+  is left. On shorter phones the title folds into the logo and the album covers shrink first.
   Messages show over the title instead of the transport buttons
+- Phones on their side keep their buttons big enough to tap (about 33-44px, were 20-27px with the
+  browser's bars showing): the FX button joins the row of effects, which show icons only
+- The small layer buttons inside the hub have a bigger touch area than their icons
 - New stage: a neon pyramid with its top cut off and the duo in the gap, bopping their heads on the
   beat. Each layer drives part of the light show, cues change every 8 bars and the groove's album
   picks the palette. Devices without a real GPU fall back to a starry night sky. The old stage (dome,
