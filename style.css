@@ -583,12 +583,6 @@ body.jamming .jam-btn { background: transparent; border-color: transparent; }
   .layer-icon { width: calc(30 * var(--u)); height: calc(30 * var(--u)); }
   .layer-icon svg { width: calc(20 * var(--u)); height: calc(20 * var(--u)); }
   .layer-song { font-size: calc(15 * var(--u)); }
-  /* a name too long for the row scrolls left round to its first word again, fading at the edge */
-  .layer-song .marq { display: inline-block; }
-  .layer-song .marq-t + .marq-t { display: none; padding-left: var(--gap); }
-  .layer-song.scroll { text-overflow: clip; mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 12px), transparent); }
-  .layer-song.scroll .marq-t + .marq-t { display: inline; }
-  .layer-song.scroll .marq { animation: marquee var(--dur, 8s) linear infinite; }
   .layer-sub, .layer-badge, .ibtn-mute { display: none; }
   .layer-actions { display: contents; }
   .layer .ibtn { pointer-events: auto; width: calc(32 * var(--u)); height: calc(32 * var(--u)); }
@@ -715,6 +709,13 @@ body.jamming .jam-btn { background: transparent; border-color: transparent; }
   .fx-btn .kc-lg { background: #1d6bff; color: #fff; }
   .fx-kc { display: none; }
 }
+/* A song name too long for its layer scrolls left round to its first word again, Spotify style,
+   fading at the edge (main.js marks which names need it). */
+.layer-song .marq { display: inline-block; }
+.layer-song .marq-t + .marq-t { display: none; padding-left: var(--gap); }
+.layer-song.scroll { text-overflow: clip; mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 12px), transparent); }
+.layer-song.scroll .marq-t + .marq-t { display: inline; }
+.layer-song.scroll .marq { animation: marquee var(--dur, 8s) linear infinite; }
 @keyframes marquee { 0%, 25% { transform: translateX(0); } 100% { transform: translateX(var(--shift)); } }
 @media (prefers-reduced-motion: reduce) {
   .layer-song.scroll .marq { animation: none; }

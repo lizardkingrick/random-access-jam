@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- On phones held upright, a song name too long for its layer row scrolls left, Spotify style, round
+- A song name too long for its layer card scrolls left, Spotify style, round
   to its first word again, pauses and repeats (with motion reduced it stays put and is cut off)
 - Game controller support is gone for now (stick, buttons, controller glyphs on the keycaps and
   the controller column in the help): the app is played with keyboard, mouse and touch
