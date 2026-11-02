@@ -31,22 +31,22 @@ there is no account and no install.
   Lead and Extra).
 - **Share, record and export.** A share link stores the whole mix in its URL. You can also
   record the jam to a file or export one 32-bar loop as a WAV.
-- **Keyboard, mouse, touch and game controllers**, with a layout for phones.
+- **Keyboard, mouse and touch**, with layouts for phones held either way.
 
 ## Controls
 
 The keyboard layout follows The Daft Punk Experience on PC.
 
-| | Keyboard / mouse | Controller |
-|---|---|---|
-| Pick song | hold the mouse button, drag through the songs, let go to pick (or just click); the highlight stays on the last song pointed at. Or `←` `→` + `Enter` | left stick + `A` |
-| Next layer | `Space` (`1` `2` `3` jump straight to Groove / Lead / Extra) | `Y` |
-| Audio FX | pick one in the FX strip (or `Q` / `E`), then hold `F` or the FX button | `LT` / `RT` pick, hold `X` |
-| Tempo | `Z` / `C`, or the pill buttons | D-pad up/down |
-| Albums | `A` / `D`, or the album tiles | `LB` / `RB` |
-| Jam mode | **Enter Jam** (top left) or click empty space: hides the cursor so small mouse flicks steer the wheel and releasing the button picks; `Tab` exits | |
-| Play / random | `P` / `R` | `Start` / `Back` |
-| Mute / clear layer | `M` / `Backspace` | `B` clears |
+| | Keyboard / mouse |
+|---|---|
+| Pick song | hold the mouse button, drag through the songs, let go to pick (or just click); the highlight stays on the last song pointed at. Or `←` `→` + `Enter` |
+| Next layer | `Space` (`1` `2` `3` jump straight to Groove / Lead / Extra) |
+| Audio FX | pick one in the FX strip (or `Q` / `E`), then hold `F` or the FX button |
+| Tempo | `Z` / `C`, or the pill buttons |
+| Albums | `A` / `D`, or the album tiles |
+| Jam mode | **Enter Jam** (top left) or click empty space: hides the cursor so small mouse flicks steer the wheel and releasing the button picks; `Tab` exits |
+| Play / random | `P` / `R` |
+| Mute / clear layer | `M` / `Backspace` |
 
 ## Contributors
 
@@ -153,7 +153,7 @@ To undo a bad release, roll back to the previous version in the Cloudflare dashb
 | `js/figures/` | Head and body silhouettes for the two figures (built by `tools/build-figures.py`) |
 | `js/vendor/three.min.js` | Trimmed Three.js bundle (rebuilt by `tools/build-three.mjs`) |
 | `js/catalog.js` | Album pages, album badge art, layer icons |
-| `js/main.js` | UI wiring, keyboard and gamepad input, share links |
+| `js/main.js` | UI wiring, keyboard and pointer input, share links |
 | `js/version.js` | App version |
 | `tools/build-stems.mjs` | WAV → Ogg conversion and `stems.json` manifest |
 | `tools/deploy.mjs` | Builds `dist/` and deploys it with Wrangler |

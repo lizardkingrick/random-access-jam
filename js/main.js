@@ -387,7 +387,6 @@ function bindFx() {
     if (jam.on) return; // pointer lock: movement is read from mousemove deltas instead
     ui.mouse.x = e.clientX; ui.mouse.y = e.clientY;
     if (e.pointerType === 'mouse') {
-      document.body.classList.remove('pad');
       steerFromPointer(e.clientX, e.clientY);
     }
   });
@@ -491,7 +490,6 @@ function bindJam() {
 let fHeld = false;
 function bindKeys() {
   addEventListener('keydown', (e) => {
-    document.body.classList.remove('pad');
     if ($('#help').open || e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === 'Tab') { // Exit Jam; outside the jam Tab keeps moving focus as usual
       if (jam.on) { e.preventDefault(); exitJam(); }
@@ -531,52 +529,6 @@ function bindKeys() {
     if (e.key === ' ') e.preventDefault(); // or a focused button would also be clicked
     if (e.key.toLowerCase() === 'f') { fHeld = false; fxRelease(); }
   });
-}
-
-// ---------- gamepad ----------
-const prevButtons = [];
-let padStickActive = false;
-function pollGamepad() {
-  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-  const gp = [...pads].find(Boolean);
-  if (!gp) { // disconnected (battery, Bluetooth): don't leave FX held
-    if (prevButtons[2]) fxRelease();
-    prevButtons.length = 0;
-    return;
-  }
-  const pressed = gp.buttons.map((b) => b.pressed);
-  const down = (i) => pressed[i] && !prevButtons[i];
-  if ($('#help').open) { // A, B or Start closes the help; nothing reaches the wheel behind it
-    if (down(0) || down(1) || down(9)) $('#help').close();
-    if (ui.fx.held && !pressed[2]) fxRelease(); // X let go while the help was up
-    pressed.forEach((p, i) => (prevButtons[i] = p));
-    return;
-  }
-  const [lx = 0, ly = 0, rx = 0, ry = 0] = gp.axes;
-  if (pressed.some(Boolean) || Math.hypot(lx, ly) > 0.5 || Math.hypot(rx, ry) > 0.5) document.body.classList.add('pad');
-
-  if (Math.hypot(lx, ly) > 0.55) { wheel.focusAngle(Math.atan2(lx, -ly) * 180 / Math.PI); padStickActive = true; }
-  else if (padStickActive && Math.hypot(lx, ly) < 0.2) padStickActive = false;
-
-  if (down(0)) wheel.pickFocused();
-  if (down(1)) E.clearLayer(ui.layer);
-  if (down(3)) cycleLayer(1);
-  if (down(4)) setAlbum(ui.album - 1);
-  if (down(5)) setAlbum(ui.album + 1);
-  if (down(12)) E.setBpm(state.bpm + 1);
-  if (down(13)) E.setBpm(state.bpm - 1);
-  if (down(14)) wheel.move(-1);
-  if (down(15)) wheel.move(1);
-  if (down(9)) {
-    E.togglePlay();
-    if (E.ctx && E.ctx.state !== 'running') toast('Click or press any key to turn the sound on');
-  }
-  if (down(8)) E.randomize();
-  if (down(6)) cycleFx(-1); // LT / RT choose the effect, X plays it
-  if (down(7)) cycleFx(1);
-  if (pressed[2]) fxEngage();
-  else if (prevButtons[2]) fxRelease();
-  pressed.forEach((p, i) => (prevButtons[i] = p));
 }
 
 // ---------- share links (compatible with the original app's format) ----------
@@ -680,10 +632,8 @@ async function boot() {
   bindKeys();
   bindJam();
   bindWheelDrag();
-  addEventListener('gamepadconnected', () => { document.body.classList.add('pad'); toast('Controller connected'); });
-  addEventListener('gamepaddisconnected', () => fxRelease());
-  // Browsers only start audio after a click or key press (a controller doesn't count), and a
-  // share link builds the mix before any. Wake the audio on the first one, whatever it is.
+  // Browsers only start audio after a click or key press, and a share link builds the mix
+  // before any. Wake the audio on the first one, whatever it is.
   const wake = () => { if (E.ctx && E.ctx.state !== 'running') E.ctx.resume().catch(() => {}); };
   ['pointerdown', 'keydown'].forEach((ev) => addEventListener(ev, wake, { capture: true }));
 
@@ -691,7 +641,6 @@ async function boot() {
   createStage($('#stage'), () => {
     const m = E.meters();
     tickClock(m);
-    pollGamepad();
     const active = {};
     for (const l of LAYERS) { const s = state.layers[l.id]; active[l.id] = !!(s.song && s.source && !s.muted && state.playing); }
     const lead = LAYERS.map((l) => state.layers[l.id].song).find(Boolean); // the first filled layer sets the album

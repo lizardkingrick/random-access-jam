@@ -1197,7 +1197,7 @@ export function createPyramid(canvas, getFrame) {
   let last = performance.now(), lastDraw = 0;
   function frame(now) {
     requestAnimationFrame(frame);
-    const f = getFrame(); // every frame: it also advances the clock and polls the controller
+    const f = getFrame(); // every frame: it also advances the clock
     const budget = f.paused ? 100 : msAvg > 40 ? 30 : 0;
     if (now - lastDraw < budget) return;
     lastDraw = now;

@@ -5,7 +5,7 @@
 //   createStage(canvas, getFrame)
 //   - canvas: the full-screen <canvas id="stage"> behind the interface.
 //   - getFrame(): call it on EVERY animation frame, even ones you skip drawing; it also advances
-//     the bar clock and polls game controllers. It returns:
+//     the bar clock. It returns:
 //       meters:   { groove, lead, texture: 0..1 levels of each layer's output,
 //                   bass, mid, high: 0..1 band energies, spectrum: Uint8Array(256) analyser bins,
 //                   beat: 0..1 phase within the beat, bar: 0..32 position in the loop,
@@ -67,7 +67,7 @@ function createStarfield(canvas, getFrame) {
   let lastDraw = 0;
   function frame(now) {
     requestAnimationFrame(frame);
-    const f = getFrame(); // every frame: it also advances the clock and polls the controller
+    const f = getFrame(); // every frame: it also advances the clock
     if (now - lastDraw < (f.paused ? 100 : 1000 / 30)) return; // stars don't need more than 30 fps
     lastDraw = now;
     resize();
@@ -104,7 +104,7 @@ function canRunShow() {
 
 export function createStage(canvas, getFrame) {
   if (!canRunShow()) return createStarfield(canvas, getFrame);
-  // The show is downloaded after the app starts; keep the clock and controllers running meanwhile.
+  // The show is downloaded after the app starts; keep the clock running meanwhile.
   let loading = true;
   const idle = () => { if (loading) { getFrame(); requestAnimationFrame(idle); } };
   requestAnimationFrame(idle);

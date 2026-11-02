@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Game controller support is gone for now (stick, buttons, controller glyphs on the keycaps and
+  the controller column in the help): the app is played with keyboard, mouse and touch
 - Installable: Add to Home Screen (or Install app in Chrome) puts a Dream Chamber icon on the
   phone and opens it full screen, without the browser's bars. The layout keeps clear of the status
   bar drawn over it. `python tools/build-icons.py` redraws the icons

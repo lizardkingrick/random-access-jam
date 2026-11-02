@@ -1,4 +1,4 @@
-// Album pages for the wheel (LB/RB on a controller) and the little badge art.
+// Album pages for the wheel and the little badge art.
 // Real covers come from covers/ when present (see loadCovers); otherwise the drawn SVG art.
 
 // Page order on the album strip: studio albums, the Weeknd collabs, then the live album.
