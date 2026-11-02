@@ -56,7 +56,9 @@ button { cursor: pointer; background: none; border: 0; }
   grid-template-columns: calc(410 * var(--u)) minmax(0, 1fr) auto;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 0 calc(24 * var(--u));
-  padding: calc(16 * var(--u)) calc(28 * var(--u)) calc(22 * var(--u));
+  /* clear of the notch and, opened from the home screen, the status bar drawn over the page */
+  padding: max(calc(16 * var(--u)), env(safe-area-inset-top)) max(calc(28 * var(--u)), env(safe-area-inset-right))
+    max(calc(22 * var(--u)), env(safe-area-inset-bottom)) max(calc(28 * var(--u)), env(safe-area-inset-left));
 }
 .topbar { grid-column: 1 / -1; display: flex; align-items: center; gap: calc(20 * var(--u)); min-width: 0; }
 .left { grid-column: 1; grid-row: 2; display: flex; flex-direction: column; justify-content: flex-end; gap: calc(12 * var(--u)); min-height: 0; }
@@ -490,10 +492,12 @@ body.pad .hub-kc svg { display: none; } /* the controller glyph (Y) shows instea
   .brand p { display: none; }
 }
 
-/* 2 + 3: stacked layouts scroll as a page; shared rules */
-@media (orientation: portrait), (max-width: 699px) {
+/* 2 + 3: stacked layouts scroll as a page; shared rules. Short landscape screens (phones on their
+   side, even narrow ones like a 667x375 iPhone SE) get layout 4 instead. */
+@media (orientation: portrait), (max-width: 699px) and (min-height: 541px) {
   body { overflow-x: hidden; overflow-y: auto; }
-  .app { display: flex; flex-direction: column; align-items: center; height: auto; min-height: 100dvh; gap: calc(16 * var(--u)); padding: calc(14 * var(--u)) calc(18 * var(--u)) calc(28 * var(--u)); }
+  .app { display: flex; flex-direction: column; align-items: center; height: auto; min-height: 100dvh; gap: calc(16 * var(--u));
+    padding: max(calc(14 * var(--u)), env(safe-area-inset-top)) calc(18 * var(--u)) max(calc(28 * var(--u)), env(safe-area-inset-bottom)); }
   .topbar { width: 100%; flex-wrap: wrap; gap: calc(10 * var(--u)) calc(12 * var(--u)); }
   .clock { margin-left: auto; }
   .right { order: 2; width: 100%; }
@@ -517,27 +521,76 @@ body.pad .hub-kc svg { display: none; } /* the controller glyph (Y) shows instea
   .layers { grid-area: layers; align-self: start; }
 }
 
-/* 3. Phones */
-@media (max-width: 699px) {
+/* 3. Phones. The whole jam fits on one screen: the wheel gives up some size on short phones, the
+   layers sit side by side under the albums, and tempo, key and the Audio FX button share a row
+   with the effects underneath, in reach of the thumbs. */
+@media (max-width: 699px) and (orientation: portrait), (max-width: 699px) and (min-height: 541px) {
   :root { --u: clamp(0.8px, 100vw / 400, 1.1px); }
   #stage { opacity: 0.75; }
-  .app { padding: calc(12 * var(--u)) calc(16 * var(--u)) calc(28 * var(--u)); }
+  .app {
+    gap: calc(12 * var(--u));
+    padding: max(calc(10 * var(--u)), env(safe-area-inset-top)) max(calc(16 * var(--u)), env(safe-area-inset-right))
+      max(calc(16 * var(--u)), env(safe-area-inset-bottom)) max(calc(16 * var(--u)), env(safe-area-inset-left));
+  }
+  .toast { top: max(calc(8 * var(--u)), env(safe-area-inset-top)); } /* over the title, not the buttons */
   .brand h1 { font-size: calc(20 * var(--u)); }
   .brand p { display: none; }
-  .clock { padding: calc(6 * var(--u)) calc(12 * var(--u)); }
-  .clock-bar { font-size: calc(14 * var(--u)); min-width: calc(76 * var(--u)); }
+  .clock { display: none; } /* it would wrap onto a row of its own; the hub's ring counts the bars */
   .transport { width: 100%; justify-content: space-between; }
   .tlabel { display: none; }
   .tbtn { padding: 0 calc(12 * var(--u)); }
   .tbtn-play .tlabel { display: inline; }
   .master-vol input { width: calc(64 * var(--u)); }
-  .wheel-wrap { width: min(100%, calc(540 * var(--u))); }
+  /* The wheel takes whatever height the rest leaves (after the notch and home bar too), so the page
+     fits the screen exactly; only on the very shortest does it stop shrinking and let the page scroll. */
+  .right { flex: 1 0 calc(330 * var(--u)); min-height: 0; container-type: size; }
+  .wheel-wrap { width: min(100cqw, calc(540 * var(--u)), calc(100cqh - 104 * var(--u))); }
   .albums { width: min(100%, calc(540 * var(--u))); }
-  .controls { justify-content: center; flex-wrap: wrap; }
-  .fx { align-items: center; }
-  .fx .fx-btn { align-self: center; }
-  .fx-row { width: 100%; }
-  .fx-hint { text-align: center; margin-left: 0; }
+  .album-name, .jam-btn, .ctl-label, .ctl-sub, .fx-hint { display: none; }
+
+  .left {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+    grid-template-areas: "layers layers layers" "tempo key fx" "chips chips chips";
+    align-items: center; gap: calc(10 * var(--u)) calc(8 * var(--u));
+    width: min(100%, calc(540 * var(--u)));
+  }
+  .controls, .fx { display: contents; }
+  .ctl { align-items: stretch; }
+  .ctl:first-child { grid-area: tempo; }
+  .ctl:last-child { grid-area: key; }
+  .pill { height: calc(48 * var(--u)); justify-content: space-between; }
+  .pill button { width: calc(40 * var(--u)); height: calc(40 * var(--u)); }
+  .tempo output { min-width: 0; font-size: calc(28 * var(--u)); }
+  .key select { flex: 1; min-width: 0; font-size: calc(22 * var(--u)); }
+  /* the FX button: the round cap with "Hold" under it */
+  .fx-btn { grid-area: fx; flex-direction: column; gap: calc(3 * var(--u)); padding: 0 calc(4 * var(--u)); align-self: center; }
+  .fx-btn.held { border-radius: calc(14 * var(--u)); }
+  .fx-btn .kc-lg { width: calc(44 * var(--u)); height: calc(44 * var(--u)); }
+  .fx-text { font-size: 0; }
+  .fx-text em { font: 700 max(10.5px, calc(11 * var(--u)))/1 var(--ui); letter-spacing: 0.12em; text-transform: uppercase; }
+  .fx-name { display: none; }
+  .fx-row { grid-area: chips; padding-left: 0; }
+
+  /* the three layers as tiles in a row: icon and buttons on top, the song under them */
+  .layers { grid-area: layers; flex-direction: row; gap: calc(8 * var(--u)); }
+  .layer {
+    flex: 1 1 0; min-width: 0;
+    grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "icon actions" "text text";
+    align-items: start; gap: calc(6 * var(--u)) calc(4 * var(--u));
+    padding: calc(7 * var(--u)) calc(7 * var(--u)) calc(16 * var(--u));
+  }
+  .layer-icon { grid-area: icon; width: calc(34 * var(--u)); height: calc(34 * var(--u)); }
+  .layer-icon svg { width: calc(22 * var(--u)); height: calc(22 * var(--u)); }
+  .layer-actions { grid-area: actions; justify-self: end; gap: calc(4 * var(--u)); }
+  .layer-badge { display: none; }
+  .ibtn { width: calc(32 * var(--u)); height: calc(32 * var(--u)); }
+  .layer-text { grid-area: text; }
+  .layer-song {
+    font-size: calc(15 * var(--u)); white-space: normal; min-height: 2.1em;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  }
+  .layer-sub { font-size: max(10.5px, calc(11.5 * var(--u))); }
+  .layer-vol { left: calc(7 * var(--u)); right: calc(7 * var(--u)); }
 }
 @media (max-width: 520px) {
   .master-vol { display: none; }
@@ -547,21 +600,75 @@ body.pad .hub-kc svg { display: none; } /* the controller glyph (Y) shows instea
   .layer-badge { display: none; }
   .keys { grid-template-columns: 1fr; }
   .help { padding: calc(20 * var(--u)); }
-  .toast { top: calc(64 * var(--u)); }
 }
 
-/* 4. Phones on their side: the wheel fills the height, albums run down its side, the left
-   panel scrolls on its own. */
+/* 4. Phones on their side. There's no top row: the transport heads the left panel, and the wheel
+   and the album rail take the full height on the right. Laid out for two thumbs (left on the
+   controls and Audio FX, right on the wheel) in a 450-unit-tall screen, clear of the notch. */
 @media (orientation: landscape) and (max-height: 540px) {
-  :root { --u: clamp(0.6px, 100dvh / 620, 1px); }
-  .app { padding: calc(10 * var(--u)) calc(16 * var(--u)); }
-  .brand p, .fx-hint, .album-name, .jam-btn { display: none; }
-  .left { overflow-y: auto; justify-content: flex-start; padding-right: calc(4 * var(--u)); scrollbar-width: thin; }
-  .right { flex-direction: row; gap: calc(12 * var(--u)); }
-  .wheel-wrap { width: min(calc(100dvh - 90 * var(--u)), calc(100vw - 600 * var(--u))); }
-  .albums { flex-direction: column; padding: calc(6 * var(--u)); }
-  .album-strip { flex-direction: column; overflow-x: hidden; overflow-y: auto; max-height: calc(100dvh - 180 * var(--u)); }
-  .album-nav { width: calc(48 * var(--u)); height: calc(32 * var(--u)); }
+  :root { --u: clamp(0.5px, 100dvh / 450, 1.15px); }
+  body { overscroll-behavior: none; } /* no pull-to-refresh or rubber-banding mid-jam */
+  .app {
+    grid-template-columns: calc(290 * var(--u)) minmax(0, 1fr);
+    gap: calc(8 * var(--u)) calc(14 * var(--u));
+    padding: max(calc(8 * var(--u)), env(safe-area-inset-top)) max(calc(12 * var(--u)), env(safe-area-inset-right))
+      max(calc(8 * var(--u)), env(safe-area-inset-bottom)) max(calc(12 * var(--u)), env(safe-area-inset-left));
+  }
+  .scrim { background: linear-gradient(90deg, rgba(2, 3, 12, 0.85) 0%, rgba(2, 3, 12, 0.6) 30%, rgba(2, 3, 12, 0.2) 50%); }
+  .toast { top: max(calc(14 * var(--u)), env(safe-area-inset-top)); }
+
+  /* transport: one row of round buttons at the top of the left panel; the hub's ring is the bar clock */
+  .topbar { grid-column: 1; grid-row: 1; }
+  .brand, .clock, .master-vol { display: none; }
+  .transport { width: 100%; justify-content: space-between; gap: calc(6 * var(--u)); }
+  .tbtn, .tbtn-play { width: calc(42 * var(--u)); height: calc(42 * var(--u)); padding: 0; justify-content: center; }
+  .tbtn .tlabel, .tbtn-play .tlabel { display: none; }
+  .tbtn svg { width: calc(20 * var(--u)); height: calc(20 * var(--u)); }
+
+  /* Never a scrolling panel: everything is sized to fit the height, and the layer cards give way
+     on the very shortest screens (a phone with the browser's bars showing). */
+  .left { grid-row: 2; overflow: hidden; justify-content: flex-start; gap: calc(8 * var(--u)); }
+  .layers { flex: 0 1 auto; min-height: 0; }
+  .layer { flex: 0 1 auto; min-height: 0; }
+  .jam-btn, .ctl-label, .ctl-sub, .fx-hint, .album-name { display: none; }
+
+  /* tempo and key split the panel's width */
+  .controls { gap: calc(8 * var(--u)); }
+  .ctl { flex: 1; align-items: stretch; }
+  .pill { height: calc(46 * var(--u)); justify-content: space-between; }
+  .pill button { width: calc(40 * var(--u)); height: calc(40 * var(--u)); }
+  .tempo output { min-width: 0; font-size: calc(28 * var(--u)); }
+  .key select { flex: 1; min-width: 0; font-size: calc(22 * var(--u)); }
+
+  .fx { gap: calc(6 * var(--u)); }
+  .fx-btn { padding: calc(3 * var(--u)) calc(12 * var(--u)) calc(3 * var(--u)) calc(3 * var(--u)); gap: calc(10 * var(--u)); }
+  .fx-text { font-size: calc(22 * var(--u)); }
+  .fx-row { padding-left: 0; }
+  .fx-chip { padding: calc(8 * var(--u)) 2px; }
+
+  /* compact layer cards */
+  .layers { gap: calc(6 * var(--u)); }
+  .layer { grid-template-columns: calc(44 * var(--u)) minmax(0, 1fr) auto; gap: calc(10 * var(--u)); padding: calc(6 * var(--u)) calc(8 * var(--u)) calc(12 * var(--u)) calc(6 * var(--u)); }
+  .layer.current { transform: none; }
+  .layer-icon { width: calc(44 * var(--u)); height: calc(44 * var(--u)); }
+  .layer-icon svg { width: calc(28 * var(--u)); height: calc(28 * var(--u)); }
+  .layer-song { font-size: calc(19 * var(--u)); }
+  .layer-sub { font-size: max(10.5px, calc(12.5 * var(--u))); }
+  .layer-badge { display: none; } /* the line under the song names the album; the name needs the room */
+  .ibtn { width: calc(36 * var(--u)); height: calc(36 * var(--u)); }
+  .layer-vol { left: calc(60 * var(--u)); }
+
+  /* the wheel as tall as the screen, the albums in a rail beside it */
+  .right { grid-column: 2; grid-row: 1 / -1; flex-direction: row; gap: calc(10 * var(--u)); }
+  .wheel-wrap {
+    width: min(calc(100dvh - max(calc(8 * var(--u)), env(safe-area-inset-top)) - max(calc(8 * var(--u)), env(safe-area-inset-bottom))), calc(100% - 72 * var(--u)));
+    touch-action: none; /* the page doesn't scroll here, so a drag in any direction steers */
+  }
+  .albums { flex-direction: column; flex: none; padding: calc(6 * var(--u)); gap: calc(6 * var(--u)); max-height: 100%; }
+  .album-strip { flex-direction: column; overflow-x: hidden; overflow-y: auto; min-height: 0; }
+  .album-nav { width: calc(48 * var(--u)); height: calc(34 * var(--u)); flex: none; }
+  .album { width: calc(48 * var(--u)); height: calc(48 * var(--u)); }
+  .album[aria-selected="true"] { width: calc(58 * var(--u)); height: calc(58 * var(--u)); }
 }
 
 @media (hover: none) {

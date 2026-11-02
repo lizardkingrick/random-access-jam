@@ -698,11 +698,12 @@ async function boot() {
     return { meters: m, active, playing: state.playing, bpm: state.bpm, fx: ui.fx.amount, fxX: ui.fx.x, zone: ui.zone, open: ui.open, paused: helpEl.open, album: lead ? E.MANIFEST[lead].album : null };
   });
   // The stage centres its pyramid over the open area between the side panels; when the panels
-  // are stacked (phones, portrait) that's the whole width.
+  // are stacked (phones, portrait), or leave only a sliver between them (phones on their side),
+  // that's the whole width.
   const measureZone = () => {
     const wheel = $('#wheelWrap').getBoundingClientRect(), left = $('.left').getBoundingClientRect();
     ui.zone = Math.max(0.3, wheel.left / innerWidth);
-    ui.open = left.right < wheel.left ? [left.right / innerWidth, wheel.left / innerWidth] : [0, 1];
+    ui.open = wheel.left - left.right > innerWidth * 0.15 ? [left.right / innerWidth, wheel.left / innerWidth] : [0, 1];
   };
   addEventListener('resize', measureZone);
   measureZone();

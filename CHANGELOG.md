@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Installable: Add to Home Screen (or Install app in Chrome) puts a Dream Chamber icon on the
+  phone and opens it full screen, without the browser's bars. The layout keeps clear of the status
+  bar drawn over it. `python tools/build-icons.py` redraws the icons
+- Phones on their side get a new layout: no top row, the transport heads the left panel and the
+  wheel takes the full height with the albums in a rail beside it. Buttons are bigger for thumbs,
+  the layout stays clear of the notch, and drags on the wheel steer in any direction (a vertical
+  drag used to be taken as a scroll and dropped the pick). The left panel never scrolls or shows a
+  scrollbar: it fits the height, down to a phone with the browser's bars showing. Small phones
+  turned sideways (667x375, 568x320) used to get the portrait layout squeezed sideways and now get
+  this one. The stage centres the pyramid on the whole screen when there's no gap between the panels
+- Phones held upright fit the whole jam on one screen: the layers are three tiles side by side
+  under the albums, tempo, key and the Audio FX button share a row with the effects underneath,
+  and the wheel shrinks a little on shorter phones instead of pushing the controls off screen.
+  Messages show over the title instead of the transport buttons
 - New stage: a neon pyramid with its top cut off and the duo in the gap, bopping their heads on the
   beat. Each layer drives part of the light show, cues change every 8 bars and the groove's album
   picks the palette. Devices without a real GPU fall back to a starry night sky. The old stage (dome,

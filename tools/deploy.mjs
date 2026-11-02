@@ -10,7 +10,7 @@ import { spawnSync } from 'node:child_process';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = join(ROOT, 'dist');
-const SITE = ['index.html', 'style.css', 'stems.json', '_headers', 'js', 'stems-ogg'];
+const SITE = ['index.html', 'style.css', 'manifest.webmanifest', 'icons', 'stems.json', '_headers', 'js', 'stems-ogg'];
 const OPTIONAL = ['covers']; // album covers, if you've built them (npm run covers)
 
 for (const f of SITE) {

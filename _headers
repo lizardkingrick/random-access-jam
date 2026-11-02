@@ -18,5 +18,12 @@
   Cache-Control: no-cache
 /style.css
   Cache-Control: no-cache
+/manifest.webmanifest
+  Cache-Control: no-cache
+
 /stems.json
   Cache-Control: no-cache
+
+# Home-screen icons (rebuilt with python tools/build-icons.py): cache for a day.
+/icons/*
+  Cache-Control: public, max-age=86400
