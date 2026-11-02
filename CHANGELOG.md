@@ -37,6 +37,16 @@
   server that plays the WAV stems straight from your folders (no ffmpeg or Node step)
 - `start.cmd -Lan` serves the app to other devices on your local network (one-time admin
   prompt; the firewall rule only admits the local subnet)
+- `start.cmd -Public` runs the server behind a reverse proxy for internet use. It only answers the
+  proxy (`-TrustedProxy`, this PC by default) and tells visitors apart by `X-Forwarded-For`
+- The local server is hardened in every mode. It serves only the app and the media it lists (never
+  the rest of the repo), sends security headers including a Content-Security-Policy, and streams
+  files in parallel. It also drops stalled clients, limits each visitor's requests and downloads,
+  supports ETag revalidation and never shows error details to the browser. Locally and with
+  `-Lan` it only answers addresses that name this PC, so other websites can't reach it through
+  DNS rebinding. The app waits and retries when the server says it is busy. The Node dev server
+  (`serve.mjs`) now only listens on this computer, refuses other host names and never serves
+  dot files
 - Instrument Guns page on the wheel when the instrument-gun loops are next to the stems:
   backing track, melody gun and rhythm gun as Groove, Lead and Extra. The engine now handles
   loops of any whole number of bars (the Da Funk melody gun is 16 bars)

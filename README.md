@@ -86,9 +86,58 @@ To point it somewhere else: `start.cmd -Stems "D:\Daft Punk\Stems" -Extras "D:\D
 `index.html` directly from disk won't work, because browsers block audio and scripts on
 `file://` pages.
 
+In every mode, including `-Public` below, the server does the following:
+
+- It serves only the app (`index.html`, `style.css`, `stems.json`, the web app manifest and icons,
+  the scripts and images under `js/`, and `covers/` if you've built them) and the media files it
+  lists. It never serves the rest of the repo, links out of the media folders, or anything else on
+  disk.
+- It sends security headers, including a Content-Security-Policy, and never shows error details
+  to the browser.
+- It streams files in parallel and drops clients that read slower than 32 KB/s. A third of the
+  slots are kept free for the page itself, so stem downloads can't lock it out.
+- It limits each visitor to 8 requests at once (4 stem downloads) and 300 requests in a burst,
+  then 5 a second. Downloads are limited to 1 GB in a burst, then 2 MB a second. The app waits
+  and retries when it hits a limit.
+- Locally and with `-Lan`, it only answers addresses that name this PC (`localhost`, its IP
+  address or its computer name), so another website can't reach it by pointing its own domain
+  at your PC.
+
+### Publish it through a reverse proxy
+
+To put it on the internet, run **`start.cmd -Public`** behind a reverse proxy (nginx, Caddy, IIS,
+Cloudflare Tunnel and so on) that faces the internet and handles HTTPS.
+
+- Only the proxy can connect. Everyone else gets a 403, including other devices on your network.
+- **Proxy on this PC** (the default): point it at `http://localhost:8137/`.
+- **Proxy on another machine:** pass its address, `start.cmd -Public -TrustedProxy 10.0.0.2`, and
+  point it at this PC's address shown in the server window. Separate several addresses with
+  commas and no spaces. Trust only the proxy itself, not a whole network range: anything you trust
+  can claim to be any visitor. A Cloudflare Tunnel whose `cloudflared` runs on another machine
+  counts as such a proxy.
+- If the site says "This server only answers its reverse proxy", the proxy connects from an address
+  that isn't trusted. The server window names that address and the `-TrustedProxy` to restart with.
+- With only a remote proxy trusted, opening `http://localhost:8137/` on this PC gets the same
+  message; open the site through the proxy instead.
+- The first run asks once for administrator permission to reserve the port. For a proxy on another
+  machine, it also opens the firewall to that address only. If an older rule (from `-Lan`) lets in
+  more, the server window says so and gives the command to narrow it.
+- In `-Public` mode the server won't move to another port if 8137 is busy; it stops with an error
+  instead. It also turns off QuickEdit in its window, because selecting text there would pause it.
+- The proxy must add the `X-Forwarded-For` header. Caddy and Cloudflare Tunnel add it by default.
+  For nginx, add `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`. The per-visitor
+  limits rely on this header.
+- Set up HTTPS and HSTS on the proxy, since this server only speaks plain HTTP. Leave the proxy's
+  response buffering on (the nginx default) so slow visitors tie up the proxy, not this server. If
+  the proxy can rate-limit per IP (nginx `limit_req`, Caddy `rate_limit`), turn that on too.
+
+Anyone who can open the site can download the stems, so only publish audio you're allowed to share.
+
 ### With Node.js and ffmpeg
 
-You need [Node.js](https://nodejs.org) 18+ and [ffmpeg](https://ffmpeg.org) on your PATH.
+You need [Node.js](https://nodejs.org) 18+ and [ffmpeg](https://ffmpeg.org) on your PATH. The
+Node server (`serve.mjs`) is for local development only: it only listens on this computer and
+serves the folder above the repo, so never put it behind a proxy.
 
 ```
 npm install
@@ -156,7 +205,7 @@ To undo a bad release, roll back to the previous version in the Cloudflare dashb
 | `wrangler.jsonc` | Cloudflare config: Worker name, assets folder, custom domain |
 | `serve.mjs` | Zero-dependency local dev server (Node) |
 | `start.cmd`, `tools/serve.ps1` | Windows local server: no installs, plays the WAVs straight from your folders |
-| `tools/allow-lan.ps1` | One-time admin setup for `start.cmd -Lan` (port reservation + local-subnet firewall rule) |
+| `tools/allow-lan.ps1` | One-time admin setup for `start.cmd -Lan` / `-Public` (port reservation + firewall rule) |
 | `_headers` | Cache rules for the hosted site |
 
 ## License
