@@ -1,5 +1,6 @@
-// The stage: a live concert seen from the crowd. A pyramid of LED panels with two figures in its
-// cockpit, a lighting rig, haze, and an audience in silhouette, shot on a long lens.
+// The stage: a live concert seen from the crowd. A pyramid of LED panels with its top cut off and
+// floating above it, two figures standing in the gap, a lighting rig, haze, and an audience in
+// silhouette, shot on a long lens.
 //
 // It is run like a lighting desk rather than a meter. Each stem layer owns part of the rig, so the
 // show builds as layers are added:
@@ -11,7 +12,7 @@
 // phrase changes. The groove's album picks the palette.
 
 import {
-  AdditiveBlending, BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, CylinderGeometry, DataTexture,
+  AdditiveBlending, BoxGeometry, BufferAttribute, CustomBlending, OneMinusSrcAlphaFactor, SrcAlphaFactor, ZeroFactor, BufferGeometry, CanvasTexture, CylinderGeometry, DataTexture,
   FloatType, FrontSide, HalfFloatType, InstancedBufferAttribute, InstancedMesh, LinearFilter, LinearMipmapLinearFilter,
   LinearSRGBColorSpace, Mesh, NoToneMapping, Object3D, OrthographicCamera, PerspectiveCamera, PlaneGeometry, Points,
   Quaternion, RedFormat, RGBAFormat, BackSide, Scene, ShaderMaterial, UnsignedByteType, Vector2, Vector3,
@@ -25,7 +26,8 @@ const W = 15.5, H = 17.5, D = 15.5;
 const SLOPE = Math.hypot(H, D);
 const EDGE = SLOPE / Math.hypot(SLOPE, W); // slanted-edge distance factor, in face space
 const INRADIUS = (W * SLOPE) / (W + Math.hypot(W, SLOPE));
-const COCKPIT = { halfW: 3.1, s0: 5.6, s1: 10 }; // the opening in the front face, in face space
+const CUT = 0.63;      // where the top is cut off, as a fraction of the height
+const CAP_SCALE = 0.58, CAP_Y = 17; // the floating top: its size, and the height of its base
 
 // [a, b] per album: the main colour and the accent, linear RGB.
 const PALETTES = {
@@ -49,14 +51,14 @@ const CUES = [
   { prog: 2, beam: 'cross', cam: 4, swap: true, laser: false },
 ];
 
-// Long lenses from inside the crowd: [position, target, vertical fov]. Every shot keeps the whole
-// pyramid in frame except the last, which is on the booth.
+// Long lenses from inside the crowd: [position, target, vertical fov]. The wide shots all frame the
+// pyramid at the same size, so nothing jumps in scale on a cut. The last is the close-up on the two.
 const CAMS = [
   [[0, 2.3, 44], [0, 10.4, 0], 32],
-  [[-24, 3, 36], [1, 9.6, 2], 30],
-  [[14, 2.6, 47], [0, 10, 0], 30],
-  [[21, 2, 41], [-1, 9.4, 0], 35],
-  [[-2, 3, 48], [0, 6.1, 7], 12],
+  [[-24, 3, 36], [1, 9.6, 2], 32.5],
+  [[14, 2.6, 47], [0, 10, 0], 28.8],
+  [[21, 2, 41], [-1, 9.4, 0], 30.6],
+  [[-2, 3, 48], [0, 13.4, 3], 12],
 ];
 
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
@@ -110,7 +112,6 @@ const FACE_FRAG = /* glsl */`
   void main() {
     vec2 p = vP.xy;
     float side = vP.z;
-    if (side < .5 && abs(p.x) < ${COCKPIT.halfW.toFixed(2)} && p.y > ${COCKPIT.s0.toFixed(2)} && p.y < ${COCKPIT.s1.toFixed(2)}) discard;
 
     float v = p.y / S;
     float halfw = W * (1. - v);
@@ -179,17 +180,22 @@ const FACE_FRAG = /* glsl */`
   }
 `;
 
-function pyramidGeometry() {
+// The four faces between two fractions of the height. Both pieces of the pyramid keep the
+// same face coordinates, so the LED tubes carry on across the cut.
+function pyramidGeometry(from, to) {
   const faces = [
-    [[-W, 0, D], [W, 0, D], [0, H, 0]],   // front
-    [[-W, 0, -D], [-W, 0, D], [0, H, 0]], // left
-    [[W, 0, D], [W, 0, -D], [0, H, 0]],   // right
+    [[-W, 0, D], [W, 0, D]],   // front
+    [[-W, 0, -D], [-W, 0, D]], // left
+    [[W, 0, D], [W, 0, -D]],   // right
+    [[W, 0, -D], [-W, 0, -D]], // back
   ];
+  const at = (v, t) => [v[0] * (1 - t), H * t, v[2] * (1 - t)];
   const pos = [], face = [];
-  faces.forEach((f, id) => {
-    f.forEach((v, k) => {
-      pos.push(...v);
-      face.push(k === 0 ? -W : k === 1 ? W : 0, k === 2 ? SLOPE : 0, id);
+  faces.forEach(([a, b], id) => {
+    const corners = [[a, -1, from], [b, 1, from], [b, 1, to], [a, -1, from], [b, 1, to], [a, -1, to]];
+    corners.forEach(([v, sign, t]) => {
+      pos.push(...at(v, t));
+      face.push(sign * W * (1 - t), t * SLOPE, id);
     });
   });
   const g = new BufferGeometry();
@@ -198,7 +204,6 @@ function pyramidGeometry() {
   return g;
 }
 
-// The cockpit: a booth let into the front face, lit from behind.
 function paintCanvas(w, h, paint) {
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
@@ -210,57 +215,40 @@ function paintCanvas(w, h, paint) {
   return t;
 }
 
-const cockpitTexture = () => paintCanvas(1024, 512, (g) => {
+// The light behind the two of them: a soft pool at each figure, fading out in the gap.
+const gapGlowTexture = () => paintCanvas(1024, 512, (g) => {
   g.fillStyle = '#000';
   g.fillRect(0, 0, 1024, 512);
   g.globalCompositeOperation = 'lighter';
-  for (const x of [286, 738]) {
-    const pool = g.createRadialGradient(x, 190, 10, x, 210, 250);
-    pool.addColorStop(0, '#fff');
-    pool.addColorStop(0.5, '#555');
+  for (const x of [364, 660]) {
+    const pool = g.createRadialGradient(x, 240, 10, x, 250, 240);
+    pool.addColorStop(0, '#ddd');
+    pool.addColorStop(0.3, '#777');
+    pool.addColorStop(0.6, '#222');
+    pool.addColorStop(0.85, '#070707');
     pool.addColorStop(1, '#000');
     g.fillStyle = pool;
     g.fillRect(0, 0, 1024, 512);
   }
-  g.globalCompositeOperation = 'source-over';
-  g.fillStyle = 'rgba(0,0,0,.5)';
-  for (let x = 0; x < 1024; x += 30) g.fillRect(x, 0, 2, 512);
-  for (let y = 0; y < 512; y += 30) g.fillRect(0, y, 1024, 2);
 });
 
-// The two of them: dark figures against the back wall, with a thin strip of light for a visor.
-// The head is drawn on a 512x640 canvas with the neck running off the bottom.
-const NECK = '#030304';
-
-const figureHead = () => paintCanvas(512, 640, (g) => {
-  g.fillStyle = NECK;
-  g.fillRect(221, 460, 70, 180);
-  g.beginPath();
-  g.ellipse(256, 340, 115, 145, 0, 0, TAU);
-  g.fill();
-  g.fillStyle = '#ffdb99';
-  g.fillRect(166, 318, 180, 22);
-});
-
-const figureBody = () => paintCanvas(768, 384, (g) => {
-  g.translate(384, 32);
-  g.scale(2.45, 2.45);
-  g.fillStyle = NECK;
-  g.beginPath();
-  g.moveTo(-66, 170);
-  g.bezierCurveTo(-72, 60, -52, 26, -22, 18);
-  g.lineTo(22, 18);
-  g.bezierCurveTo(52, 26, 72, 60, 66, 170);
-  g.fill();
-});
-
-const deskTexture = () => paintCanvas(1024, 96, (g) => {
-  g.fillStyle = '#040405';
-  g.fillRect(0, 0, 1024, 96);
-  g.fillStyle = '#fff';
-  const r = rng(5);
-  for (let x = 60; x < 964; x += 9) { g.globalAlpha = r() * r() * 0.6; g.fillRect(x, 14 + Math.floor(r() * 4) * 8, 3, 2); }
-});
+// The two of them: silhouettes in js/figures/, cut by tools/build-figures.py. Head and body are
+// separate images of the same size, so they line up when placed at the same spot.
+const FIGURE_PX = [1086, 1448];
+function loadFigureMap(meshes, name) {
+  const img = new Image();
+  img.onload = () => {
+    const t = new CanvasTexture(img);
+    t.colorSpace = LinearSRGBColorSpace;
+    t.generateMipmaps = true;
+    t.minFilter = LinearMipmapLinearFilter;
+    for (const mesh of meshes) {
+      mesh.material.uniforms.uMap.value = t;
+      mesh.visible = true;
+    }
+  };
+  img.src = new URL(`./figures/${name}.png`, import.meta.url).href;
+}
 
 // ---------- the audience ----------
 const CROWD_POSES = 8;
@@ -357,14 +345,15 @@ const CROWD_FRAG = /* glsl */`
   }
 `;
 
+// The figures are holes in the picture: they clear the HDR image's alpha, and the final pass turns
+// those pixels pure black after the glow has gone on, so nothing lifts them.
 const FIGURE_FRAG = /* glsl */`
   uniform sampler2D uMap;
-  uniform float uLight;
   varying vec2 vUv;
   void main() {
-    vec4 t = texture2D(uMap, vUv);
-    if (t.a < .03) discard;
-    gl_FragColor = vec4(t.rgb * (.22 + uLight * 1.5), t.a);
+    float a = texture2D(uMap, vUv).a;
+    if (a < .02) discard;
+    gl_FragColor = vec4(0., 0., 0., a);
   }
 `;
 
@@ -559,6 +548,9 @@ const FINAL_FRAG = /* glsl */`
     float lum = dot(col, vec3(.3, .6, .1));
     col += g * mix(.032, .012, smoothstep(0., .6, lum));
     col = uBlack + col * (1. - uBlack);
+    // the figures: a deep stage black that lets a trace of the room through. Additive light pushes
+    // alpha past 1, hence the min.
+    col = mix(vec3(.035, .037, .045) + col * .06, col, min(texture2D(uTex, vUv).a, 1.));
     gl_FragColor = vec4(col, 1.);
   }
 `;
@@ -609,9 +601,41 @@ export function createPyramid(canvas, getFrame) {
     uA: shared.uA, uB: shared.uB, uT: shared.uT, uKick: shared.uKick, uGlow: shared.uGlow, uSpec: { value: specTex },
     uLevel: { value: 0 }, uHit: { value: 0 }, uGate: { value: 0 }, uIdle: { value: 1 }, uProg: { value: 0 }, uRes: { value: 1 },
   };
-  const pyramid = new Mesh(pyramidGeometry(), new ShaderMaterial({ vertexShader: FACE_VERT, fragmentShader: FACE_FRAG, uniforms: faceU, side: FrontSide }));
-  scene.add(pyramid);
-  scene.add(new Mesh(pyramid.geometry, new ShaderMaterial({ vertexShader: BACK_VERT, fragmentShader: 'void main() { gl_FragColor = vec4(0., 0., 0., 1.); }', side: BackSide })));
+  const faceMat = new ShaderMaterial({ vertexShader: FACE_VERT, fragmentShader: FACE_FRAG, uniforms: faceU, side: FrontSide });
+  const blackMat = (side) => new ShaderMaterial({ vertexShader: BACK_VERT, fragmentShader: 'void main() { gl_FragColor = vec4(0., 0., 0., 1.); }', side });
+  const cutY = H * CUT, cutW = W * (1 - CUT), cutD = D * (1 - CUT);
+  const addFaces = (parent, geometry) => {
+    parent.add(new Mesh(geometry, faceMat));
+    parent.add(new Mesh(geometry, blackMat(BackSide)));
+  };
+  // turned so a corner points at the crowd, as on the real stage; narrowed a little so the wider
+  // view across the corners still fits
+  const rig = new Object3D();
+  rig.rotation.y = Math.PI / 4;
+  rig.scale.set(0.82, 1, 0.82);
+  scene.add(rig);
+  addFaces(rig, pyramidGeometry(0, CUT));
+  const deck = new Mesh(new PlaneGeometry(cutW * 2, cutD * 2), blackMat(FrontSide));
+  deck.rotation.x = -Math.PI / 2;
+  deck.position.y = cutY;
+  rig.add(deck);
+
+  // the top of the pyramid, floating above the gap
+  const topPiece = new Object3D();
+  topPiece.scale.setScalar(CAP_SCALE);
+  topPiece.position.y = CAP_Y - cutY * CAP_SCALE;
+  rig.add(topPiece);
+  addFaces(topPiece, pyramidGeometry(CUT, 1));
+  const capBase = new Mesh(new PlaneGeometry(cutW * 2, cutD * 2), new ShaderMaterial({
+    vertexShader: BACK_VERT,
+    fragmentShader: /* glsl */`
+      uniform vec3 uA; uniform float uGlow; varying vec2 vUv;
+      void main() { gl_FragColor = vec4(uA * uGlow * .1 * vUv.y + vec3(.0015), 1.); }`,
+    uniforms: { uA: shared.uA, uGlow: shared.uGlow },
+  }));
+  capBase.rotation.x = Math.PI / 2;
+  capBase.position.y = cutY;
+  topPiece.add(capBase);
 
   // edges of the pyramid: steel with a run of LEDs
   const edgeMat = new ShaderMaterial({
@@ -622,31 +646,35 @@ export function createPyramid(canvas, getFrame) {
   const edgeGeo = new BoxGeometry(0.09, 1, 0.09);
   edgeGeo.setAttribute('aTower', new BufferAttribute(new Float32Array(edgeGeo.attributes.position.count), 1));
   const up = new Vector3(0, 1, 0);
-  const placeEdge = (a, b) => {
+  const placeEdge = (a, b, parent = rig) => {
     const m = new Mesh(edgeGeo, edgeMat);
     const A = new Vector3(...a), B = new Vector3(...b);
     m.position.copy(A).add(B).multiplyScalar(0.5);
     m.scale.y = A.distanceTo(B);
     m.quaternion.setFromUnitVectors(up, B.clone().sub(A).normalize());
-    scene.add(m);
+    parent.add(m);
   };
-  placeEdge([-W, 0, D], [0, H, 0]);
-  placeEdge([W, 0, D], [0, H, 0]);
-  placeEdge([-W, 0, -D], [0, H, 0]);
-  placeEdge([W, 0, -D], [0, H, 0]);
-  placeEdge([-W, 0.08, D], [W, 0.08, D]);
+  const corners = [[-1, 1], [1, 1], [1, -1], [-1, -1]];
+  corners.forEach(([x, z], i) => {
+    const [nx, nz] = corners[(i + 1) % 4];
+    placeEdge([x * W, 0, z * D], [x * cutW, cutY, z * cutD]);
+    placeEdge([x * W, 0.08, z * D], [nx * W, 0.08, nz * D]);
+    placeEdge([x * cutW, cutY, z * cutD], [nx * cutW, cutY, nz * cutD]);
+    placeEdge([x * cutW, cutY, z * cutD], [0, H, 0], topPiece);
+    placeEdge([x * cutW, cutY, z * cutD], [nx * cutW, cutY, nz * cutD], topPiece);
+  });
 
-  // the cockpit
-  const cockY = (COCKPIT.s0 + COCKPIT.s1) * 0.5 * (H / SLOPE);
-  const cockH = (COCKPIT.s1 - COCKPIT.s0) * (H / SLOPE);
-  const cockZ = D * (1 - cockY / H);
-  const cockU = { uMap: { value: cockpitTexture() }, uA: shared.uA, uB: shared.uB, uLight: { value: 0.1 } };
-  // nodFrom: where in the beat this one's head goes down. They're never quite together.
+  // the gap between the two pieces, lit from behind
+  const cockU = { uMap: { value: gapGlowTexture() }, uA: shared.uA, uB: shared.uB, uLight: { value: 0.1 } };
+  // Two people at the same decks: the sizes even out how much of each image the figure fills.
+  // y: height of the image's centre. neck: the pivot, in source
+  // pixels. tip: which way a nod turns. nodFrom: where in the beat this one's head goes down, because
+  // they're never quite together.
   const performers = [
-    { x: -1.5, lean: 0.03, nodFrom: 0 },
-    { x: 1.5, lean: -0.025, nodFrom: 0.035 },
+    { name: 'left', x: 2.15, y: 13.28, size: 0.88, neck: [610, 600], tip: -1, nodFrom: 0 },
+    { name: 'right', x: -2.3, y: 13.55, size: 1.035, neck: [520, 590], tip: 1, nodFrom: 0.035 },
   ];
-  const cockpit = new Mesh(new PlaneGeometry(COCKPIT.halfW * 2 + 0.6, cockH + 1.3), new ShaderMaterial({
+  const gapGlow = new Mesh(new PlaneGeometry(18, 9), new ShaderMaterial({
     vertexShader: BACK_VERT,
     fragmentShader: /* glsl */`
       uniform sampler2D uMap; uniform vec3 uA, uB; uniform float uLight; varying vec2 vUv;
@@ -654,47 +682,43 @@ export function createPyramid(canvas, getFrame) {
         vec3 warm = mix(uA, vec3(1.), .4);
         gl_FragColor = vec4(warm * texture2D(uMap, vUv).r * (.04 + uLight * .42), 1.);
       }`,
-    uniforms: cockU,
+    uniforms: cockU, blending: AdditiveBlending, transparent: true, depthWrite: false,
   }));
-  cockpit.position.set(0, cockY, cockZ - 4.6);
-  scene.add(cockpit);
-  // the booth's walls, black: they stop the faces being seen through the opening
-  const boothBox = new Mesh(new BoxGeometry(COCKPIT.halfW * 2 + 1.2, cockH + 0.6, 4.4), new ShaderMaterial({
-    vertexShader: BACK_VERT, side: BackSide,
-    fragmentShader: /* glsl */`uniform vec3 uA; uniform float uLight; void main() { gl_FragColor = vec4(uA * uLight * .03, 1.); }`,
-    uniforms: cockU,
-  }));
-  boothBox.position.set(0, cockY, cockZ - 3.98);
-  scene.add(boothBox);
+  gapGlow.position.set(0, 14, -1.5);
+  scene.add(gapGlow);
 
-  // the two of them, behind the desk: the heads pivot at the neck so they can nod
-  const figureZ = cockZ - 3;
+  // the two of them, behind the front edge: the heads pivot at the neck so they can nod
   const figureMat = (map) => new ShaderMaterial({
     vertexShader: BACK_VERT, fragmentShader: FIGURE_FRAG, transparent: true, depthWrite: false,
-    uniforms: { uMap: { value: map }, uLight: cockU.uLight },
+    blending: CustomBlending, blendSrc: SrcAlphaFactor, blendDst: OneMinusSrcAlphaFactor, blendSrcAlpha: ZeroFactor, blendDstAlpha: OneMinusSrcAlphaFactor,
+    uniforms: { uMap: { value: map } },
   });
-  const headMap = figureHead(), bodyMap = figureBody();
+  const figureH = 4.6, figureW = figureH * FIGURE_PX[0] / FIGURE_PX[1];
   performers.forEach((p) => {
-    p.body = new Mesh(new PlaneGeometry(2.6, 1.3), figureMat(bodyMap));
-    p.body.position.set(p.x, cockY - 0.62, figureZ);
+    p.root = new Object3D();
+    scene.add(p.root);
+
+    const w = figureW * p.size, h = figureH * p.size;
+    p.body = new Mesh(new PlaneGeometry(w, h), figureMat(null));
+    p.body.position.y = p.y;
     p.body.renderOrder = 1;
-    p.bodyY = p.body.position.y;
-    scene.add(p.body);
-    const face = new Mesh(new PlaneGeometry(1.36, 1.7), figureMat(headMap));
-    face.position.y = 0.85;
-    face.renderOrder = 2;
+    p.body.visible = false;
+    p.bodyY = p.y;
+    p.root.add(p.body);
+    loadFigureMap([p.body], `${p.name}-body`);
+
+    const pivotX = (p.neck[0] / FIGURE_PX[0] - 0.5) * w, pivotY = (0.5 - p.neck[1] / FIGURE_PX[1]) * h;
     p.head = new Object3D();
-    p.head.position.set(p.x, cockY - 0.42, figureZ + 0.05);
+    p.head.position.set(pivotX, p.y + pivotY, 0.02);
     p.neckY = p.head.position.y;
+    p.root.add(p.head);
+    const face = new Mesh(new PlaneGeometry(w, h), figureMat(null));
+    face.position.set(-pivotX, -pivotY, 0);
+    face.renderOrder = 2;
+    face.visible = false;
     p.head.add(face);
-    scene.add(p.head);
+    loadFigureMap([face], `${p.name}-head`);
   });
-  const desk = new Mesh(new PlaneGeometry(COCKPIT.halfW * 2 + 1, 1.3), new ShaderMaterial({
-    vertexShader: BACK_VERT, fragmentShader: FIGURE_FRAG,
-    uniforms: { uMap: { value: deskTexture() }, uLight: cockU.uLight },
-  }));
-  desk.position.set(0, cockY - 1.5, figureZ + 0.9);
-  scene.add(desk);
 
   // side towers
   const towers = [[-23, 13], [23, 13], [-29.5, 16.5], [29.5, 16.5], [-36, 11], [36, 11]];
@@ -1018,6 +1042,31 @@ export function createPyramid(canvas, getFrame) {
     camera.updateProjectionMatrix();
   }
 
+  // The two stand side by side around the centre of the deck, facing the audience. Flat cut-outs
+  // can't turn, so each shot places them the way two real people would look from there. From the
+  // front they stand apart. From the side the one facing away is mirrored so both look the same way,
+  // the pair closes up until they overlap, and they move to the middle of the deck as seen from that
+  // side, up toward its near edge. Their heights never change: the left one stands a little taller. Each body also narrows a little as it turns away.
+  function placeFigures() {
+    const yaw = Math.atan2(camera.position.x, camera.position.z);
+    const facing = Math.cos(yaw), right = Math.sin(yaw);
+    const side = Math.abs(yaw) < 0.2 ? 0 : Math.sign(yaw); // -1 left camera, 1 right camera
+    performers.forEach((p) => {
+      const along = p.x * facing ** 4;
+      const offset = along + right * (side < 0 ? 1.5 : 2.6);
+      const forward = Math.abs(right) * 4; // up toward the near edge of the deck
+      // stepping forward would bring them nearer the lens and show more of them over the rim
+      const near = 1 - forward / 44;
+      p.root.position.set(offset * facing + forward * right, (1 - near) * 13.3 - Math.abs(right) * 1.6, -offset * right + forward * facing);
+      p.root.rotation.y = yaw;
+      p.root.scale.set((p.tip === -side ? -1 : 1) * (0.86 + 0.14 * facing * facing) * near, near, 1);
+    });
+    // the glow stays behind them, wherever the lens is
+    gapGlow.position.set(-1.5 * Math.sin(yaw), gapGlow.position.y, -1.5 * Math.cos(yaw));
+    gapGlow.rotation.y = yaw;
+    gapGlow.scale.x = facing;
+  }
+
   function update(f, dt) {
     const reduced = reduce.matches;
     const m = f.meters;
@@ -1107,10 +1156,9 @@ export function createPyramid(canvas, getFrame) {
     nodDepth = approach(nodDepth, nodTo, dt, 7, 3);
     performers.forEach((p, i) => {
       const n = nodShape((m.beat - p.nodFrom + 1) % 1) * nodDepth;
-      p.head.rotation.x = n * 0.5;
-      p.head.position.y = p.neckY - n * 0.3;
-      p.head.rotation.z = p.lean + Math.sin(T * Math.PI * 0.5 + i * 2) * 0.045 * nodDepth;
-      p.body.position.y = p.bodyY - n * 0.07;
+      p.head.rotation.z = p.tip * n * 0.2 + Math.sin(T * Math.PI * 0.5 + i * 2) * 0.02 * nodDepth;
+      p.head.position.y = p.neckY - n * 0.14;
+      p.body.position.y = p.bodyY - n * 0.1;
     });
 
     const beamPw = pres.lead * (0.2 + level.lead * 0.9) * gate * (1 - fxAmt * 0.3) * 0.62;
@@ -1130,6 +1178,7 @@ export function createPyramid(canvas, getFrame) {
 
     finalMat.uniforms.uExposure.value = 1.02 - fxAmt * 0.22 + hit * g * 0.15;
     placeCamera(f, dt, reduced);
+    placeFigures();
     faceU.uRes.value = h;
   }
 
