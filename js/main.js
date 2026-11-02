@@ -249,10 +249,10 @@ function buildControls() {
     btn.disabled = true;
     try {
       const blob = await E.exportLoopWav();
-      if (blob) { download(blob, 'dream-chamber-loop.wav'); toast('Exported one 32-bar loop'); }
+      if (blob) { download(blob, E.mixFileName('wav')); toast('Exported one 32-bar loop'); }
     } catch (err) {
       console.error(err);
-      toast('Export failed — see console', 'error');
+      toast('Export failed: try again, or with fewer layers if memory is short', 'error');
     } finally { btn.disabled = false; }
   };
   $('#shareBtn').onclick = shareMix;
@@ -665,7 +665,7 @@ async function boot() {
     await Promise.all([E.loadManifest('stems.json'), loadCovers()]);
   } catch (err) {
     console.error(err);
-    toast('Could not load stems.json — run tools/build-stems.mjs first', 'error');
+    toast("Couldn't load the song list: check the connection and reload the page", 'error');
     return;
   }
   if (!Object.keys(E.MANIFEST).length) {
@@ -685,7 +685,8 @@ async function boot() {
   // Browsers only start audio after a click or key press (a controller doesn't count), and a
   // share link builds the mix before any. Wake the audio on the first one, whatever it is.
   const wake = () => { if (E.ctx && E.ctx.state !== 'running') E.ctx.resume().catch(() => {}); };
-  ['pointerdown', 'keydown'].forEach((ev) => addEventListener(ev, wake, { capture: true }));
+  // On touch screens only the end of a tap counts as the click that allows it.
+  ['pointerdown', 'pointerup', 'touchend', 'keydown'].forEach((ev) => addEventListener(ev, wake, { capture: true }));
 
   const helpEl = $('#help');
   createStage($('#stage'), () => {
