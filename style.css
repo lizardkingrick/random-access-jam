@@ -302,6 +302,7 @@ body.jamming .jam-btn { background: transparent; border-color: transparent; }
 @keyframes shimmer { 50% { opacity: 0.45; } }
 
 /* ---------- wheel ---------- */
+.wheel-box { display: contents; } /* a box of its own only in the phone layout */
 .wheel-wrap {
   position: relative;
   /* As big as the height allows (minus the top bar and album strip), without crowding the left panel. */
@@ -525,18 +526,27 @@ body.jamming .jam-btn { background: transparent; border-color: transparent; }
       max(calc(16 * var(--u)), env(safe-area-inset-bottom)) max(calc(16 * var(--u)), env(safe-area-inset-left));
   }
   .toast { top: max(calc(8 * var(--u)), env(safe-area-inset-top)); } /* over the title, not the buttons */
-  .brand h1 { font-size: calc(20 * var(--u)); }
-  .brand p { display: none; }
-  .clock { display: none; } /* it would wrap onto a row of its own; the hub's ring counts the bars */
-  .transport { width: 100%; justify-content: space-between; }
+  /* one row: the logo, a clear gap, then the buttons; the hub's ring is the bar clock */
+  .topbar { flex-wrap: nowrap; gap: 0; }
+  .brand > div, .clock { display: none; }
+  .brand { margin-right: calc(16 * var(--u)); }
+  .brand-mark { width: calc(30 * var(--u)); height: calc(30 * var(--u)); }
+  .transport { flex: 1; min-width: 0; justify-content: space-between; gap: 0; }
+  .transport .tbtn:not(.tbtn-play) { width: calc(40 * var(--u)); padding: 0; justify-content: center; }
   .tlabel { display: none; }
   .tbtn { padding: 0 calc(12 * var(--u)); }
   .tbtn-play .tlabel { display: inline; }
   .master-vol input { width: calc(64 * var(--u)); }
   /* The wheel takes whatever height the rest leaves (after the notch and home bar too), so the page
      fits the screen exactly; only on the very shortest does it stop shrinking and let the page scroll. */
-  .right { --albums-h: calc(104 * var(--u)); flex: 1 0 calc(280 * var(--u)); min-height: 0; container-type: size; }
-  .wheel-wrap { width: min(100cqw, calc(540 * var(--u)), calc(100cqh - var(--albums-h))); }
+  /* The wheel takes all the height the rest leaves, so the album bar sits right on top of the
+     layers with no gap; only on the very shortest phones does the wheel stop shrinking and let
+     the page scroll. */
+  .right { display: contents; }
+  .wheel-box { order: 2; display: flex; justify-content: center; align-items: center; width: 100%; flex: 1 0 calc(165 * var(--u)); min-height: 0; container-type: size; }
+  .wheel-wrap { width: min(100cqw, calc(540 * var(--u)), 100cqh); }
+  .albums { order: 3; }
+  .left { order: 4; }
   .albums { width: min(100%, calc(540 * var(--u))); }
   .album-name, .jam-btn, .ctl-label, .ctl-sub, .fx-hint { display: none; }
 
@@ -563,26 +573,28 @@ body.jamming .jam-btn { background: transparent; border-color: transparent; }
   .fx-name { display: none; }
   .fx-row { grid-area: chips; padding-left: 0; }
 
-  /* the three layers as tiles in a row: icon and buttons on top, the song under them */
-  .layers { grid-area: layers; flex-direction: row; gap: calc(8 * var(--u)); }
+  /* the three layers as slim full-width rows: icon, song, its own volume and remove (tap a row to
+     pick that layer on the wheel; M still mutes) */
+  .layers { grid-area: layers; gap: calc(6 * var(--u)); }
   .layer {
-    flex: 1 1 0; min-width: 0;
-    grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "icon actions" "text text";
-    align-items: start; gap: calc(6 * var(--u)) calc(4 * var(--u));
-    padding: calc(7 * var(--u)) calc(7 * var(--u)) calc(16 * var(--u));
+    grid-template-columns: auto minmax(0, 1fr) minmax(0, 1.25fr) auto;
+    gap: calc(10 * var(--u)); padding: calc(4 * var(--u)) calc(4 * var(--u)) calc(4 * var(--u)) calc(6 * var(--u));
   }
-  .layer-icon { grid-area: icon; width: calc(34 * var(--u)); height: calc(34 * var(--u)); }
-  .layer-icon svg { width: calc(22 * var(--u)); height: calc(22 * var(--u)); }
-  .layer-actions { grid-area: actions; justify-self: end; gap: calc(4 * var(--u)); }
-  .layer-badge { display: none; }
-  .ibtn { width: calc(32 * var(--u)); height: calc(32 * var(--u)); }
-  .layer-text { grid-area: text; }
-  .layer-song {
-    font-size: calc(15 * var(--u)); white-space: normal; min-height: 2.1em;
-    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
-  }
-  .layer-sub { font-size: max(10.5px, calc(11.5 * var(--u))); }
-  .layer-vol { left: calc(7 * var(--u)); right: calc(7 * var(--u)); }
+  .layer-icon { width: calc(30 * var(--u)); height: calc(30 * var(--u)); }
+  .layer-icon svg { width: calc(20 * var(--u)); height: calc(20 * var(--u)); }
+  .layer-song { font-size: calc(15 * var(--u)); }
+  /* a name too long for the row scrolls left round to its first word again, fading at the edge */
+  .layer-song .marq { display: inline-block; }
+  .layer-song .marq-t + .marq-t { display: none; padding-left: var(--gap); }
+  .layer-song.scroll { text-overflow: clip; mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 12px), transparent); }
+  .layer-song.scroll .marq-t + .marq-t { display: inline; }
+  .layer-song.scroll .marq { animation: marquee var(--dur, 8s) linear infinite; }
+  .layer-sub, .layer-badge, .ibtn-mute { display: none; }
+  .layer-actions { display: contents; }
+  .layer .ibtn { pointer-events: auto; width: calc(32 * var(--u)); height: calc(32 * var(--u)); }
+  .ibtn-clear { order: 2; }
+  .layer-vol { position: relative !important; inset: auto; order: 1; width: 100%; min-width: 0; height: calc(32 * var(--u)); }
+  .layer.empty { grid-template-columns: auto minmax(0, 1fr); }
 }
 @media (max-width: 520px) {
   .master-vol { display: none; }
@@ -598,12 +610,7 @@ body.jamming .jam-btn { background: transparent; border-color: transparent; }
    covers shrink, so the wheel keeps its size. */
 @media (max-width: 699px) and (orientation: portrait) and (max-height: 800px) {
   .app { gap: calc(8 * var(--u)); }
-  .topbar { flex-wrap: nowrap; }
-  .brand > div { display: none; }
-  .brand-mark { width: calc(30 * var(--u)); height: calc(30 * var(--u)); }
-  .transport { flex: 1; width: auto; }
   .left { row-gap: calc(8 * var(--u)); }
-  .right { --albums-h: calc(84 * var(--u)); gap: calc(8 * var(--u)); }
   .albums { padding: calc(6 * var(--u)); }
   .album { width: calc(38 * var(--u)); height: calc(38 * var(--u)); }
   .album[aria-selected="true"] { width: calc(50 * var(--u)); height: calc(50 * var(--u)); }
@@ -667,18 +674,29 @@ body.jamming .jam-btn { background: transparent; border-color: transparent; }
 
   /* compact layer cards */
   .layers { gap: calc(6 * var(--u)); }
-  .layer { grid-template-columns: calc(40 * var(--u)) minmax(0, 1fr) auto; gap: calc(10 * var(--u)); padding: calc(5 * var(--u)) calc(8 * var(--u)) calc(11 * var(--u)) calc(5 * var(--u)); }
+  .layer {
+    grid-template-columns: calc(40 * var(--u)) minmax(0, 1fr) auto; grid-template-areas: "icon text actions" "icon vol actions";
+    gap: calc(2 * var(--u)) calc(10 * var(--u)); padding: calc(5 * var(--u)) calc(8 * var(--u)) calc(5 * var(--u)) calc(5 * var(--u));
+  }
+  .layer-icon { grid-area: icon; }
+  .layer-text { grid-area: text; align-self: end; }
+  .layer-actions { grid-area: actions; }
   .layer.current { transform: none; }
   .layer-icon { width: calc(40 * var(--u)); height: calc(40 * var(--u)); }
   .layer-icon svg { width: calc(26 * var(--u)); height: calc(26 * var(--u)); }
   .layer-song { font-size: calc(18 * var(--u)); }
   .layer-sub { font-size: max(10.5px, calc(12.5 * var(--u))); }
   .layer-badge { display: none; } /* the line under the song names the album; the name needs the room */
-  .ibtn { width: calc(36 * var(--u)); height: calc(36 * var(--u)); }
-  .layer-vol { left: calc(55 * var(--u)); }
+  .layer-actions { gap: calc(10 * var(--u)); }
+  .ibtn { width: calc(34 * var(--u)); height: calc(34 * var(--u)); }
+  /* the volume is its own line under the song, so it can't cover the name or the buttons */
+  .layer-vol { position: relative !important; inset: auto; grid-area: vol; width: 100%; height: calc(14 * var(--u)); }
+  .layer.empty .layer-text { align-self: center; }
+  .layer.empty { grid-template-areas: "icon text actions"; }
 
   /* the wheel as tall as the screen, the albums in a rail beside it */
-  .right { grid-column: 2; grid-row: 1 / -1; flex-direction: row; gap: calc(10 * var(--u)); }
+  /* the wheel and the album rail sit against the right edge; the stage shows in the gap */
+  .right { grid-column: 2; grid-row: 1 / -1; flex-direction: row; justify-content: flex-end; gap: calc(10 * var(--u)); }
   .wheel-wrap {
     width: min(calc(100dvh - max(calc(8 * var(--u)), env(safe-area-inset-top)) - max(calc(8 * var(--u)), env(safe-area-inset-bottom))), calc(100% - 72 * var(--u)));
     touch-action: none; /* the page doesn't scroll here, so a drag in any direction steers */
@@ -697,7 +715,11 @@ body.jamming .jam-btn { background: transparent; border-color: transparent; }
   .fx-btn .kc-lg { background: #1d6bff; color: #fff; }
   .fx-kc { display: none; }
 }
+@keyframes marquee { 0%, 25% { transform: translateX(0); } 100% { transform: translateX(var(--shift)); } }
 @media (prefers-reduced-motion: reduce) {
+  .layer-song.scroll .marq { animation: none; }
+  .layer-song.scroll .marq-t + .marq-t { display: none; }
+  .layer-song.scroll { text-overflow: ellipsis; mask-image: none; }
   .seg { animation: none; }
   .layer.playing .layer-icon svg { animation: none; }
 }

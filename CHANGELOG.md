@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- On phones held upright, a song name too long for its layer row scrolls left, Spotify style, round
+  to its first word again, pauses and repeats (with motion reduced it stays put and is cut off)
 - Game controller support is gone for now (stick, buttons, controller glyphs on the keycaps and
   the controller column in the help): the app is played with keyboard, mouse and touch
 - Installable: Add to Home Screen (or Install app in Chrome) puts a Dream Chamber icon on the
@@ -19,6 +21,11 @@
   the Audio FX button share a row with the effects underneath, and the wheel takes whatever height
   is left. On shorter phones the title folds into the logo and the album covers shrink first.
   Messages show over the title instead of the transport buttons
+- Phones held upright: the top row is the logo, a clear gap and the buttons. The layers are three
+  slim full-width rows, each with its own volume and remove (M still mutes), and the wheel takes all
+  the spare height, with the album bar right on top of the layers
+- Phones on their side: the wheel and album rail sit against the right edge again with the stage
+  in the gap, and each layer's volume runs under the song only, clear of its mute and remove buttons
 - Phones on their side keep their buttons big enough to tap (about 33-44px, were 20-27px with the
   browser's bars showing): the FX button joins the row of effects, which show icons only
 - The small layer buttons inside the hub have a bigger touch area than their icons

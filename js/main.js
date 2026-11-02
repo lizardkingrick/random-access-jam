@@ -170,6 +170,31 @@ function buildLayers() {
   }
 }
 
+// Song names too long for their row scroll left, Spotify style: the start of the name follows the end
+// round and the scroll comes to rest on the first word again, pauses, and repeats (see
+// .layer-song.scroll in the phone layout). Names that fit stay still.
+const MARQUEE_GAP = 36; // px between the end of the name and its start coming round again
+function setSongName(el, text) {
+  if (el.dataset.text === text) return;
+  el.dataset.text = text;
+  el.innerHTML = '<span class="marq"><span class="marq-t"></span><span class="marq-t" aria-hidden="true"></span></span>';
+  el.querySelectorAll('.marq-t').forEach((t) => (t.textContent = text));
+  fitSongName(el);
+}
+function fitSongName(el) {
+  const t = el.querySelector('.marq-t');
+  if (!t) return;
+  const scroll = t.offsetWidth - el.clientWidth > 1;
+  el.classList.toggle('scroll', scroll);
+  const dist = t.offsetWidth + MARQUEE_GAP;
+  el.style.setProperty('--shift', `${-dist}px`);
+  el.style.setProperty('--gap', `${MARQUEE_GAP}px`);
+  el.style.setProperty('--dur', `${(dist / 32 / 0.75).toFixed(1)}s`); // ~32px/s, a quarter of it paused on the first word
+}
+const fitSongNames = () => document.querySelectorAll('.layer-song').forEach(fitSongName);
+addEventListener('resize', fitSongNames);
+document.fonts?.ready.then(fitSongNames);
+
 function renderLayers() {
   for (const li of $('#layers').children) {
     const id = li.dataset.layer, s = state.layers[id], def = layerDef(id);
@@ -183,14 +208,14 @@ function renderLayers() {
     $('.ibtn-mute', li).setAttribute('aria-pressed', s.muted);
     const song = $('.layer-song', li), sub = $('.layer-sub', li);
     if (!s.song) {
-      song.textContent = def.label;
+      setSongName(song, def.label);
       sub.textContent = id === ui.layer ? `Pick a song on the wheel →` : 'Empty';
       $('.layer-badge', li).dataset.album = '';
       continue;
     }
     const info = E.MANIFEST[s.song];
     const part = s.type === 'all' ? 'full mix' : info.parts && info.parts[s.type];
-    song.textContent = displayName(s.song) + (part ? ` (${part})` : '');
+    setSongName(song, displayName(s.song) + (part ? ` (${part})` : ''));
     sub.textContent = s.loading && s.progress < 1 ? `Loading… ${Math.round((s.progress || 0) * 100)}%`
       : s.loading || s.syncing ? 'Syncing to tempo…'
       : `${albumById(info.album).name} · ${prettyKey(info.key)}${shiftLabel(s.song)}`;
