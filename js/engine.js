@@ -112,13 +112,17 @@ const isCurrent = (s) => !!s.buffer && s.bufferKey === renderKey(s.song, s.type)
 
 // The local server (tools/serve.ps1) lists the stem folders, so the song list comes straight
 // from disk with no build step. The hosted site has no listing and uses the prebuilt stems.json.
+// Both are asked for at once: on the hosted site the listing is a 404, and waiting for that
+// before asking for stems.json cost a round trip before any stem could start.
 export async function loadManifest(url) {
+  const hosted = fetch(url).then((res) => res.json());
+  hosted.catch(() => {}); // unused, and maybe missing, when the local listing answers
   try {
     const res = await fetchPatiently('__local/files', { cache: 'no-store' });
     if (res.ok && (res.headers.get('content-type') || '').includes('json')) LOCAL = await res.json();
   } catch (_) { /* not the local server */ }
   if (LOCAL && LOCAL.stems && LOCAL.stems.length) MANIFEST = manifestFromListing(LOCAL);
-  else MANIFEST = await (await fetch(url)).json();
+  else MANIFEST = await hosted;
   return MANIFEST;
 }
 

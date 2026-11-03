@@ -663,6 +663,15 @@ async function boot() {
   // On touch screens only the end of a tap counts as the click that allows it.
   ['pointerdown', 'pointerup', 'touchend', 'keydown'].forEach((ev) => addEventListener(ev, wake, { capture: true }));
 
+  const ram = ui.albums.indexOf('ram');
+  setAlbum(ram >= 0 ? ram : 0);
+  // The app rewrites the hash with replaceState (no event), so this only fires when someone
+  // pastes another share link into the address bar, even while this one loads: load that mix.
+  addEventListener('hashchange', () => location.reload());
+  // A shared mix starts downloading before the stage is set up, and the stage's show (three.js
+  // and the figures, ~650 KB) waits until the mix is in, so on a phone they don't split the line.
+  const restoring = restoreFromHash().catch((err) => { console.error('share restore failed', err); return false; });
+
   const helpEl = $('#help');
   createStage($('#stage'), () => {
     const m = E.meters();
@@ -671,7 +680,7 @@ async function boot() {
     for (const l of LAYERS) { const s = state.layers[l.id]; active[l.id] = !!(s.song && s.source && !s.muted && state.playing); }
     const lead = LAYERS.map((l) => state.layers[l.id].song).find(Boolean); // the first filled layer sets the album
     return { meters: m, active, playing: state.playing, bpm: state.bpm, fx: ui.fx.amount, fxX: ui.fx.x, zone: ui.zone, open: ui.open, paused: helpEl.open, album: lead ? E.MANIFEST[lead].album : null };
-  });
+  }, restoring);
   // The stage centres its pyramid over the open area between the side panels; when the panels
   // are stacked (phones, portrait), or leave only a sliver between them (phones on their side),
   // that's the whole width.
@@ -683,13 +692,7 @@ async function boot() {
   addEventListener('resize', measureZone);
   measureZone();
 
-  const ram = ui.albums.indexOf('ram');
-  setAlbum(ram >= 0 ? ram : 0);
-  // The app rewrites the hash with replaceState (no event), so this only fires when someone
-  // pastes another share link into the address bar, even while this one loads: load that mix.
-  addEventListener('hashchange', () => location.reload());
-  const restored = await restoreFromHash().catch((err) => { console.error('share restore failed', err); return false; });
-  if (!restored) {
+  if (!await restoring) {
     let seen = false;
     try { seen = localStorage.getItem('dcr-seen-help') === '1'; localStorage.setItem('dcr-seen-help', '1'); } catch (_) { /* private mode */ }
     if (!seen) $('#help').showModal();

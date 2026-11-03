@@ -2,8 +2,10 @@
 // it, and otherwise (or if it fails to start) falls back to a black night sky with twinkling stars.
 //
 // The contract for a stage (main.js calls it once):
-//   createStage(canvas, getFrame)
+//   createStage(canvas, getFrame, after)
 //   - canvas: the full-screen <canvas id="stage"> behind the interface.
+//   - after: optional promise (a shared mix loading); the show isn't downloaded until it settles,
+//     or 8 s have passed, so it doesn't compete with the stems.
 //   - getFrame(): call it on EVERY animation frame, even ones you skip drawing; it also advances
 //     the bar clock. It returns:
 //       meters:   { groove, lead, texture: 0..1 levels of each layer's output,
@@ -102,13 +104,14 @@ function canRunShow() {
   } catch (_) { return false; }
 }
 
-export function createStage(canvas, getFrame) {
+export function createStage(canvas, getFrame, after = null) {
   if (!canRunShow()) return createStarfield(canvas, getFrame);
   // The show is downloaded after the app starts; keep the clock running meanwhile.
   let loading = true;
   const idle = () => { if (loading) { getFrame(); requestAnimationFrame(idle); } };
   requestAnimationFrame(idle);
-  import('./stage-pyramid.js')
+  Promise.race([Promise.resolve(after).catch(() => {}), new Promise((r) => setTimeout(r, 8000))])
+    .then(() => import('./stage-pyramid.js'))
     .then((m) => { m.createPyramid(canvas, getFrame); loading = false; })
     .catch((err) => {
       console.error('stage failed to start', err);

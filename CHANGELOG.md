@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Faster start, sound unchanged: the song list no longer waits for the local server's file
+  listing (a 404 on the hosted site, one round trip before any stem could start), a shared mix's
+  stems start downloading before the stage is set up, and the stage's show (three.js and the
+  figures, ~650 KB) waits until the mix is in (8 s at most), so on a phone they don't split the line
 - Phones held upright: each layer row has a mute button again, and mute and remove answer taps
   (the row's own tap target used to sit on top of them). Tempo, key and the Audio FX row are
   slimmer, so the wheel gets more of the height
