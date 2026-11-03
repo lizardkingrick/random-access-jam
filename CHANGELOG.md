@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The site moved to dreamchamberremixed.xyz (Worker `dream-chamber-remixed`); hiddenalchemist.com
+  is no longer used. `npm run deploy -- --config <file>` deploys with another wrangler config
 - A song name too long for its layer card scrolls left, Spotify style, round
   to its first word again, pauses and repeats (with motion reduced it stays put and is cut off)
 - Game controller support is gone for now (stick, buttons, controller glyphs on the keycaps and

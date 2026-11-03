@@ -1,6 +1,6 @@
 # Dream Chamber Remixed
 
-**Version 1.0 beta** · **Live at [hiddenalchemist.com](https://hiddenalchemist.com)**
+**Version 1.0 beta** · **Live at [dreamchamberremixed.xyz](https://dreamchamberremixed.xyz)**
 
 A browser jam station inspired by the remix area of **The Daft Punk Experience** in
 Fortnite. Fill three layers (**Groove**, **Lead** and **Extra**) with stems from different
@@ -164,24 +164,32 @@ drawn art.
 ## Updating the site
 
 The site is hosted on **Cloudflare Workers static assets**, the successor to Cloudflare Pages.
-The Worker is named `random-access-jam` and serves the domain `hiddenalchemist.com`. Both are
-set in `wrangler.jsonc`. The stems are uploaded straight from your machine; they never go
-through git. Unchanged files are skipped on each deploy, so updates that touch only the code
-are quick.
+The Worker is named `dream-chamber-remixed` and serves the domain `dreamchamberremixed.xyz`.
+Both are set in `wrangler.jsonc`. The stems are uploaded straight from your machine; they never
+go through git. Unchanged files are skipped on each deploy, so updates that touch only the code
+are quick. You need [Node.js](https://nodejs.org) 18+, plus [ffmpeg](https://ffmpeg.org) on your
+PATH to build the Ogg stems (`npm run stems`) the first time or when the stems change.
 
 ```
 # one time only
-npx wrangler login
+npm install
+npm run stems -- --stems "D:\path\to\Stems"   # Ogg copies + stems.json
+npx wrangler login           # or set CLOUDFLARE_API_TOKEN (template: Edit Cloudflare Workers)
 
 # every release
 git add -A && git commit -m "What changed"
 git push
-npm run deploy               # goes live on hiddenalchemist.com
+npm run deploy               # goes live on dreamchamberremixed.xyz
 npm run deploy -- preview    # or: upload a preview version first; the live site is unchanged
 ```
 
+`npx wrangler login` needs a browser on the same machine. Where that doesn't work (a remote
+server, or a browser that fails Cloudflare's bot check), create an API token in the dashboard
+(My Profile → API Tokens, template **Edit Cloudflare Workers**, limited to your account and the
+`dreamchamberremixed.xyz` zone) and set it as the `CLOUDFLARE_API_TOKEN` environment variable.
+
 To undo a bad release, roll back to the previous version in the Cloudflare dashboard
-(Workers & Pages → random-access-jam → Deployments) or run `npx wrangler rollback`.
+(Workers & Pages → dream-chamber-remixed → Deployments) or run `npx wrangler rollback`.
 
 ### Releasing a new version
 

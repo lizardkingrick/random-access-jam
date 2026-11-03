@@ -1,8 +1,9 @@
 // Builds dist/ (the static site + Ogg stems) and uploads it to Cloudflare
 // (Workers static assets, configured in wrangler.jsonc).
 // The stems never go through git — they're uploaded straight from this machine.
-// Usage:  npm run deploy            (production → hiddenalchemist.com)
+// Usage:  npm run deploy            (production → dreamchamberremixed.xyz)
 //         npm run deploy -- preview (upload a version with a preview URL; live site untouched)
+//         npm run deploy -- --config <file> (another Cloudflare account or domain)
 import { cpSync, rmSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,5 +29,8 @@ const { version } = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'))
 const preview = process.argv.includes('preview');
 console.log(`${preview ? 'Uploading preview of' : 'Deploying'} v${version} to Cloudflare…`);
 const args = preview ? ['versions', 'upload'] : ['deploy'];
+// Another account or domain: npm run deploy -- --config my-wrangler.jsonc
+const cfg = process.argv.indexOf('--config');
+if (cfg > 0 && process.argv[cfg + 1]) args.push('--config', `"${process.argv[cfg + 1]}"`);
 const r = spawnSync('npx', ['wrangler', ...args, '--message', `"v${version}"`], { cwd: ROOT, stdio: 'inherit', shell: true });
 process.exit(r.status ?? 1);
