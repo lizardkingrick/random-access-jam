@@ -16,8 +16,11 @@ there is no account and no install.
   rendered in parallel worker threads. Key lock shifts every stem into a single key, treating a
   major key as its relative minor (A major mixes with F♯m untouched). Song swaps land on the next
   bar, and a tempo change keeps your place in the loop.
-- **Mastering glue.** A gentle bus compressor and a peak limiter keep three stacked stems from
-  clipping. Exported loops go through the same chain.
+- **Even levels, no clipping.** Each stem is measured once (integrated loudness) and trimmed so
+  louder and quieter songs sit at the same level, then a look-ahead true-peak limiter keeps the
+  mix under -1 dBTP without pumping. Exported loops go through the same chain. Where the browser
+  can't run the limiter (no AudioWorklet, or plain HTTP on a network address) a compressor is
+  used instead.
 - **24 songs, 57 stems.** They cover Homework, Discovery, Human After All, Alive 2007,
   Random Access Memories and the Weeknd collaborations.
 - **Audio FX (hold).** Pick one of six effects and hold `F` to play it: Stutter (repeats the last eighth note,
@@ -87,9 +90,58 @@ To point it somewhere else: `start.cmd -Stems "D:\Daft Punk\Stems" -Extras "D:\D
 `index.html` directly from disk won't work, because browsers block audio and scripts on
 `file://` pages.
 
+In every mode, including `-Public` below, the server does the following:
+
+- It serves only the app (`index.html`, `style.css`, `stems.json`, the web app manifest and icons,
+  the scripts and images under `js/`, and `covers/` if you've built them) and the media files it
+  lists. It never serves the rest of the repo, links out of the media folders, or anything else on
+  disk.
+- It sends security headers, including a Content-Security-Policy, and never shows error details
+  to the browser.
+- It streams files in parallel and drops clients that read slower than 32 KB/s. A third of the
+  slots are kept free for the page itself, so stem downloads can't lock it out.
+- It limits each visitor to 8 requests at once (4 stem downloads) and 300 requests in a burst,
+  then 5 a second. Downloads are limited to 1 GB in a burst, then 2 MB a second. The app waits
+  and retries when it hits a limit.
+- Locally and with `-Lan`, it only answers addresses that name this PC (`localhost`, its IP
+  address or its computer name), so another website can't reach it by pointing its own domain
+  at your PC.
+
+### Publish it through a reverse proxy
+
+To put it on the internet, run **`start.cmd -Public`** behind a reverse proxy (nginx, Caddy, IIS,
+Cloudflare Tunnel and so on) that faces the internet and handles HTTPS.
+
+- Only the proxy can connect. Everyone else gets a 403, including other devices on your network.
+- **Proxy on this PC** (the default): point it at `http://localhost:8137/`.
+- **Proxy on another machine:** pass its address, `start.cmd -Public -TrustedProxy 10.0.0.2`, and
+  point it at this PC's address shown in the server window. Separate several addresses with
+  commas and no spaces. Trust only the proxy itself, not a whole network range: anything you trust
+  can claim to be any visitor. A Cloudflare Tunnel whose `cloudflared` runs on another machine
+  counts as such a proxy.
+- If the site says "This server only answers its reverse proxy", the proxy connects from an address
+  that isn't trusted. The server window names that address and the `-TrustedProxy` to restart with.
+- With only a remote proxy trusted, opening `http://localhost:8137/` on this PC gets the same
+  message; open the site through the proxy instead.
+- The first run asks once for administrator permission to reserve the port. For a proxy on another
+  machine, it also opens the firewall to that address only. If an older rule (from `-Lan`) lets in
+  more, the server window says so and gives the command to narrow it.
+- In `-Public` mode the server won't move to another port if 8137 is busy; it stops with an error
+  instead. It also turns off QuickEdit in its window, because selecting text there would pause it.
+- The proxy must add the `X-Forwarded-For` header. Caddy and Cloudflare Tunnel add it by default.
+  For nginx, add `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`. The per-visitor
+  limits rely on this header.
+- Set up HTTPS and HSTS on the proxy, since this server only speaks plain HTTP. Leave the proxy's
+  response buffering on (the nginx default) so slow visitors tie up the proxy, not this server. If
+  the proxy can rate-limit per IP (nginx `limit_req`, Caddy `rate_limit`), turn that on too.
+
+Anyone who can open the site can download the stems, so only publish audio you're allowed to share.
+
 ### With Node.js and ffmpeg
 
-You need [Node.js](https://nodejs.org) 18+ and [ffmpeg](https://ffmpeg.org) on your PATH.
+You need [Node.js](https://nodejs.org) 18+ and [ffmpeg](https://ffmpeg.org) on your PATH. The
+Node server (`serve.mjs`) is for local development only: it only listens on this computer and
+serves the folder above the repo, so never put it behind a proxy.
 
 ```
 npm install
@@ -139,13 +191,70 @@ To undo a bad release, roll back to the previous version in the Cloudflare dashb
 3. Commit, then tag the release: `git tag v1.1.0 && git push --follow-tags`
 4. Run `npm run deploy`.
 
+## Audio engine to-do
+
+What's left from the audio audit, roughly in order of what users would notice. Effort: S is under
+an hour, M a few hours, L a day or more.
+
+**Test first**
+
+- [ ] **Safari (Mac, iPhone, iPad) and Firefox.** Everything so far was measured in Chromium only.
+  Check the limiter (`js/limiter-worklet.js`) and its compressor fallback, WAV export through the
+  limiter, Stutter / Tape stop / Wah / Phaser, recordings saving as `.m4a` on Safari, and on an
+  iPhone: sound with the silent switch on and coming back after a call.
+- [ ] **A phone over HTTPS.** The limiter only runs on HTTPS or localhost; a phone opening the
+  `-Lan` address over plain HTTP always gets the fallback compressor.
+
+**Loading and downloads**
+
+- [ ] **Hosted site on older Safari (M, high).** The Cloudflare build only has Ogg stems, which
+  Safari and iOS before 18.4 can't decode, so they get no sound. Add a FLAC copy of each stem
+  in `tools/build-stems.mjs`, fall back to it when Ogg won't decode, and say plainly when nothing
+  plays.
+- [ ] **Smaller downloads from the Windows server (L).** Serve FLAC instead of WAV: about 55% of
+  the size, so a stem over the internet takes about half as long. `getOriginal` must treat
+  `.flac` as lossless.
+- [ ] **Sound sooner on the first pick (M).** When a pick needs no stretch or key shift, start the
+  original straight away and swap in the render on a later bar.
+- [ ] **Prefetch that pays off (M).** Pre-render the hovered song at the current tempo and key
+  when a worker is idle, and start one worker on the first click.
+- [ ] **Keep the current mix's renders across reloads (M).** Store them in IndexedDB so a reload or
+  a share link doesn't stretch everything again.
+- [ ] **Less memory per stem (S-M).** Keep originals as 16-bit (half the size), and give the
+  worker input with room at the end so it doesn't copy it.
+- [ ] **Loudness in `stems.json` (S).** Measure at build time so hosted first picks skip it.
+
+**Sound quality**
+
+- [ ] **Phase vocoder for held chords and pads (L).** WSOLA still warbles a little on sustained
+  chords at big tempo changes. A phase-locked vocoder for Lead and Texture layers (WSOLA stays for
+  drums) removes it, at about 10x the render time, so render WSOLA first and swap the better one
+  in on a bar.
+- [ ] **Natural voices when the key shifts (L).** Vocals moved up to +5 or -6 semitones sound
+  chipmunked or slowed. Correct the spectral envelope on vocal Lead stems (easiest inside the
+  phase vocoder above).
+
+**Needs a UI change (talk to whoever owns the UI)**
+
+- [ ] **Show when a pick will be heard (M).** The engine knows when a swap lands; the layer card
+  could say "Downloading", "Stretching" and "Joins on the next bar" instead of looking like it
+  already plays.
+- [ ] **Lossless recording (M).** A WAV option for Rec, taken from the mix with an AudioWorklet.
+- [ ] **Volume sliders that feel even (S).** Map the slider to gain with a taper (`v * v`), so the
+  top half isn't only 6 dB. Changes the default slider position and old share links' levels.
+- [ ] **Steadier meters (S).** Per-layer levels flicker and the bass band misses the kick's low
+  end. The 3D visualizer reads `meters()`, so change it together with whoever tunes the visuals.
+- [ ] **Export extras (S-M).** A 24-bit option, and exporting each layer as its own file.
+
 ## Project layout
 
 | | |
 |---|---|
 | `index.html`, `style.css` | Layout and styling. Under 960px wide it stacks vertically for phones. |
 | `js/engine.js` | Audio graph, stem loading and conforming, transport, FX, record and export |
-| `js/stretch-worker.js` | WSOLA time-stretch and pitch-shift (MuscularCrab) |
+| `js/stretch-worker.js` | WSOLA time-stretch and pitch-shift (MuscularCrab), with drum hits pinned to the beat |
+| `js/loudness.js` | Measures each stem's integrated loudness (BS.1770) for the level trims |
+| `js/limiter-worklet.js` | The look-ahead true-peak limiter at the end of the mix |
 | `js/manifest.js` | Song catalogue; builds the song list from a local folder listing |
 | `js/wheel.js` | SVG radial song wheel |
 | `js/stage.js` | Picks the background: the pyramid stage, or a starfield fallback (the stage contract is documented at the top) |
@@ -162,7 +271,7 @@ To undo a bad release, roll back to the previous version in the Cloudflare dashb
 | `tools/serve-live.mjs` | Local dev server that streams the stems and covers from the live site |
 | `tools/stage-lab.html` | Stage preview driven by a simulated song (no audio needed) |
 | `start.cmd`, `tools/serve.ps1` | Windows local server: no installs, plays the WAVs straight from your folders |
-| `tools/allow-lan.ps1` | One-time admin setup for `start.cmd -Lan` (port reservation + local-subnet firewall rule) |
+| `tools/allow-lan.ps1` | One-time admin setup for `start.cmd -Lan` / `-Public` (port reservation + firewall rule) |
 | `_headers` | Cache rules for the hosted site |
 
 ## License

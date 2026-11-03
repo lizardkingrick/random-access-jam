@@ -34,6 +34,50 @@
   picks the palette. Devices without a real GPU fall back to a starry night sky. The old stage (dome,
   light strands, floating objects) and the helmet holograms are gone (the helmet models were game
   assets)
+- Background is a plain starry night sky for now, while a new music visualizer is designed. The old
+  stage (dome, light strands, floating objects) and the helmet holograms are gone (the helmet models
+  were game assets). The visualizer hook is documented at the top of js/stage.js
+- Audio fixes:
+  - Swaps finish on the bar line: the new stem fades in during the 10 ms before it, so its downbeat
+    lands at full level and the old stem's downbeat no longer leaks through. The same goes for Play,
+    Clear and tempo changes.
+  - Random, and a new song on the key-setting layer, swap every affected layer on the same bar once
+    all of them are ready, instead of one by one in clashing keys.
+  - No thump when letting go of Tape stop. Stutter and Tape stop also act on a swap waiting for its
+    bar line, and end when Stop is pressed.
+  - Stems slowed down a lot no longer play bar 1's downbeat twice at the loop restart.
+  - Picking a song right after a tempo change no longer drops that layer out, and clearing the last
+    layer stops the sound at once.
+  - The layer card goes straight to "Syncing" when the stem was already downloaded.
+  - Error messages say what went wrong (missing file, can't decode, connection, memory), and a
+    dropped connection is retried.
+  - Safari recordings are saved as .m4a instead of a mislabelled .webm.
+- Sound quality:
+  - Drum hits stay on the beat when a stem is slowed down or sped up a lot: hits are found and
+    pinned to their stretched time, so they no longer double, drop out or flam against other
+    layers (on a click track every hit now lands within 0.2 ms at 0.45x to 2.27x, where up to
+    54 ms off before). Leads and textures only pin hard, isolated hits, so held notes stay smooth.
+  - Less warble on chords and pads (a wider splice search between hits), no level flutter on
+    cymbals and noise at the splices, and more top end on stems shifted down in key.
+  - Every stem is measured once and trimmed to a common loudness for its layer, so swapping one
+    lead for another no longer jumps or drops by up to 5 dB.
+  - The bus compressor is replaced by a look-ahead true-peak limiter (-1 dBTP): three-layer mixes
+    no longer pump 3-5 dB on every beat, at about the same overall level. Browsers without
+    AudioWorklet, or a plain-HTTP network address, keep the old compressor.
+  - Wah sweeps in time with the beat and evenly in pitch, and no longer drops the mix by 5-10 dB.
+    Phaser is a real phaser now, synced to two bars. Tape stop lasts two beats at any tempo.
+  - Effects no longer jump on a second press or on release, and Play after Stop during Stutter is
+    no longer silent.
+- Loading and timing:
+  - Unwanted downloads (songs you hovered or picked over) are cancelled instead of holding up the
+    one you chose, and stretch jobs nobody needs any more are dropped, newest pick first.
+  - Memory use is capped by size and by device, so long jams don't crash phones.
+  - A tempo change during a Random mix waits for the whole mix, so the layers still drop in together.
+  - A layer that fails to re-sync retries once, and the playback position stays on whole samples
+    after tempo changes (no dulled top end).
+  - iPhones play with the silent switch on, and the sound comes back after a call or app switch.
+  - Exports and recordings are named after the mix (songs, BPM, key), exports are dithered, and
+    both come out at the same level.
 - Empty slots on the wheel no longer show a faint outline inside their edge
 - Song titles on the wheel always fit inside their segment ("Around The World" ran into the rim on
   Homework, and two longer titles touched the centre circle)
@@ -66,6 +110,16 @@
   server that plays the WAV stems straight from your folders (no ffmpeg or Node step)
 - `start.cmd -Lan` serves the app to other devices on your local network (one-time admin
   prompt; the firewall rule only admits the local subnet)
+- `start.cmd -Public` runs the server behind a reverse proxy for internet use. It only answers the
+  proxy (`-TrustedProxy`, this PC by default) and tells visitors apart by `X-Forwarded-For`
+- The local server is hardened in every mode. It serves only the app and the media it lists (never
+  the rest of the repo), sends security headers including a Content-Security-Policy, and streams
+  files in parallel. It also drops stalled clients, limits each visitor's requests and downloads,
+  supports ETag revalidation and never shows error details to the browser. Locally and with
+  `-Lan` it only answers addresses that name this PC, so other websites can't reach it through
+  DNS rebinding. The app waits and retries when the server says it is busy. The Node dev server
+  (`serve.mjs`) now only listens on this computer, refuses other host names and never serves
+  dot files
 - Instrument Guns page on the wheel when the instrument-gun loops are next to the stems:
   backing track, melody gun and rhythm gun as Groove, Lead and Extra. The engine now handles
   loops of any whole number of bars (the Da Funk melody gun is 16 bars)
