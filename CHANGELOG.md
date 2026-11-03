@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Phones held upright: each layer row has a mute button again, and mute and remove answer taps
+  (the row's own tap target used to sit on top of them). Tempo, key and the Audio FX row are
+  slimmer, so the wheel gets more of the height
+- Phones on their side: tempo, key and the effects are slimmer and the volume knob smaller, so the
+  knob no longer pokes out of the bottom of its layer card. On desktop and tablets the knob has
+  room under it too
+- The selected layer's button in the middle of the wheel is about twice the size of the other
+  two, which sit small and dim beside it. On small wheels the hub shows just "Playing" (the "pick
+  again to remove" hint was cut off), and the space bar key is wide like a space bar
 - The site moved to dreamchamberremixed.xyz (Worker `dream-chamber-remixed`); hiddenalchemist.com
   is no longer used. `npm run deploy -- --config <file>` deploys with another wrangler config
 - A song name too long for its layer card scrolls left, Spotify style, round

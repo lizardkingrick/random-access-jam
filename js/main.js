@@ -81,7 +81,7 @@ function renderHub() {
     let html;
     if (s.song === peek) {
       const now = s.loading ? 'Loading…' : state.playing ? 'Playing' : 'Selected';
-      html = `${meta}<br><b>${now}</b> · pick again to remove`;
+      html = `${meta}<br><b>${now}</b><span class="hub-hint"> · pick again to remove</span>`;
     } else {
       const part = info.parts && info.parts[E.stemTypeFor(ui.layer, peek)];
       html = `${meta}<br>Add ${part ? `the ${part} ` : ''}as <b>${def.label}</b>`;
