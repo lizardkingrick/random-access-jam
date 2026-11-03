@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+- A song name too long for its layer card scrolls left, Spotify style, round
+  to its first word again, pauses and repeats (with motion reduced it stays put and is cut off)
+- Game controller support is gone for now (stick, buttons, controller glyphs on the keycaps and
+  the controller column in the help): the app is played with keyboard, mouse and touch
+- Installable: Add to Home Screen (or Install app in Chrome) puts a Dream Chamber icon on the
+  phone and opens it full screen, without the browser's bars. The layout keeps clear of the status
+  bar drawn over it. `python tools/build-icons.py` redraws the icons
+- Phones on their side get a new layout: no top row, the transport heads the left panel and the
+  wheel takes the full height with the albums in a rail beside it. Buttons are bigger for thumbs,
+  the layout stays clear of the notch, and drags on the wheel steer in any direction (a vertical
+  drag used to be taken as a scroll and dropped the pick). The left panel never scrolls or shows a
+  scrollbar: it fits the height, down to a phone with the browser's bars showing. Small phones
+  turned sideways (667x375, 568x320) used to get the portrait layout squeezed sideways and now get
+  this one. The stage centres the pyramid on the whole screen when there's no gap between the panels
+- Phones held upright fit the whole jam on one screen, with the browser's bars showing or opened
+  from the home screen: the layers are three tiles side by side under the albums, tempo, key and
+  the Audio FX button share a row with the effects underneath, and the wheel takes whatever height
+  is left. On shorter phones the title folds into the logo and the album covers shrink first.
+  Messages show over the title instead of the transport buttons
+- Phones held upright: the top row is the logo, a clear gap and the buttons. The layers are three
+  slim full-width rows, each with its own volume and remove (M still mutes), and the wheel takes all
+  the spare height, with the album bar right on top of the layers
+- Phones on their side: the wheel and album rail sit against the right edge again with the stage
+  in the gap, and each layer's volume runs under the song only, clear of its mute and remove buttons
+- Phones on their side keep their buttons big enough to tap (about 33-44px, were 20-27px with the
+  browser's bars showing): the FX button joins the row of effects, which show icons only
+- The small layer buttons inside the hub have a bigger touch area than their icons
+- New stage: a neon pyramid with its top cut off and the duo in the gap, bopping their heads on the
+  beat. Each layer drives part of the light show, cues change every 8 bars and the groove's album
+  picks the palette. Devices without a real GPU fall back to a starry night sky. The old stage (dome,
+  light strands, floating objects) and the helmet holograms are gone (the helmet models were game
+  assets)
 - Background is a plain starry night sky for now, while a new music visualizer is designed. The old
   stage (dome, light strands, floating objects) and the helmet holograms are gone (the helmet models
   were game assets). The visualizer hook is documented at the top of js/stage.js

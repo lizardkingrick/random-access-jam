@@ -25,30 +25,31 @@ there is no account and no install.
   Random Access Memories and the Weeknd collaborations.
 - **Audio FX (hold).** Pick one of six effects and hold `F` to play it: Stutter (repeats the last eighth note,
   chopped), Low-pass and High-pass sweeps, Phaser, Wah, and Tape stop. Letting go snaps back in time.
-- **Background.** A starry night sky for now; a new music visualizer is in the works. The hook a
-  visualizer plugs into (what it gets each frame: levels, spectrum, beat, layout) is documented at
-  the top of `js/stage.js`.
+- **Stage.** A neon pyramid concert behind the interface, with the duo bopping their heads in time.
+  Each layer you add brings in more of the light show, a new cue lands every 8 bars, and the groove's
+  album picks the colours. Devices without a real GPU get a starry night sky instead. What the stage
+  gets each frame (levels, spectrum, beat, layout) is documented at the top of `js/stage.js`.
 - **Local extras.** When you run it locally next to the extra rips, the wheel gets an
   **Instrument Guns** page (each song's backing track, melody gun and rhythm gun as Groove,
   Lead and Extra).
 - **Share, record and export.** A share link stores the whole mix in its URL. You can also
   record the jam to a file or export one 32-bar loop as a WAV.
-- **Keyboard, mouse, touch and game controllers**, with a layout for phones.
+- **Keyboard, mouse and touch**, with layouts for phones held either way.
 
 ## Controls
 
 The keyboard layout follows The Daft Punk Experience on PC.
 
-| | Keyboard / mouse | Controller |
-|---|---|---|
-| Pick song | hold the mouse button, drag through the songs, let go to pick (or just click); the highlight stays on the last song pointed at. Or `←` `→` + `Enter` | left stick + `A` |
-| Next layer | `Space` (`1` `2` `3` jump straight to Groove / Lead / Extra) | `Y` |
-| Audio FX | pick one in the FX strip (or `Q` / `E`), then hold `F` or the FX button | `LT` / `RT` pick, hold `X` |
-| Tempo | `Z` / `C`, or the pill buttons | D-pad up/down |
-| Albums | `A` / `D`, or the album tiles | `LB` / `RB` |
-| Jam mode | **Enter Jam** (top left) or click empty space: hides the cursor so small mouse flicks steer the wheel and releasing the button picks; `Tab` exits | |
-| Play / random | `P` / `R` | `Start` / `Back` |
-| Mute / clear layer | `M` / `Backspace` | `B` clears |
+| | Keyboard / mouse |
+|---|---|
+| Pick song | hold the mouse button, drag through the songs, let go to pick (or just click); the highlight stays on the last song pointed at. Or `←` `→` + `Enter` |
+| Next layer | `Space` (`1` `2` `3` jump straight to Groove / Lead / Extra) |
+| Audio FX | pick one in the FX strip (or `Q` / `E`), then hold `F` or the FX button |
+| Tempo | `Z` / `C`, or the pill buttons |
+| Albums | `A` / `D`, or the album tiles |
+| Jam mode | **Enter Jam** (top left) or click empty space: hides the cursor so small mouse flicks steer the wheel and releasing the button picks; `Tab` exits |
+| Play / random | `P` / `R` |
+| Mute / clear layer | `M` / `Backspace` |
 
 ## Contributors
 
@@ -256,14 +257,19 @@ an hour, M a few hours, L a day or more.
 | `js/limiter-worklet.js` | The look-ahead true-peak limiter at the end of the mix |
 | `js/manifest.js` | Song catalogue; builds the song list from a local folder listing |
 | `js/wheel.js` | SVG radial song wheel |
-| `js/stage.js` | Canvas background (placeholder starfield; the visualizer hook is documented at the top) |
+| `js/stage.js` | Picks the background: the pyramid stage, or a starfield fallback (the stage contract is documented at the top) |
+| `js/stage-pyramid.js` | The pyramid stage: Three.js scene, shaders, cue sequencer, camera shots, post-processing |
+| `js/figures/` | Head and body silhouettes for the two figures (built by `tools/build-figures.py`) |
+| `js/vendor/three.min.js` | Trimmed Three.js bundle (rebuilt by `tools/build-three.mjs`) |
 | `js/catalog.js` | Album pages, album badge art, layer icons |
-| `js/main.js` | UI wiring, keyboard and gamepad input, share links |
+| `js/main.js` | UI wiring, keyboard and pointer input, share links |
 | `js/version.js` | App version |
 | `tools/build-stems.mjs` | WAV → Ogg conversion and `stems.json` manifest |
 | `tools/deploy.mjs` | Builds `dist/` and deploys it with Wrangler |
 | `wrangler.jsonc` | Cloudflare config: Worker name, assets folder, custom domain |
 | `serve.mjs` | Zero-dependency local dev server (Node) |
+| `tools/serve-live.mjs` | Local dev server that streams the stems and covers from the live site |
+| `tools/stage-lab.html` | Stage preview driven by a simulated song (no audio needed) |
 | `start.cmd`, `tools/serve.ps1` | Windows local server: no installs, plays the WAVs straight from your folders |
 | `tools/allow-lan.ps1` | One-time admin setup for `start.cmd -Lan` / `-Public` (port reservation + firewall rule) |
 | `_headers` | Cache rules for the hosted site |

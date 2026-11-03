@@ -6,6 +6,13 @@
 <title>Dream Chamber Remixed</title>
 <meta name="description" content="Jam with Daft Punk stems in your browser — pick a groove, lead and extra from different songs, auto-synced in tempo and key. Inspired by The Daft Punk Experience.">
 <meta name="theme-color" content="#03040c">
+<!-- Add to Home Screen: opens full screen, without the browser's bars -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Dream Chamber">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:wght@500;600;700;800&family=Barlow:wght@500;600;700&display=swap" rel="stylesheet">
@@ -70,7 +77,7 @@
 
   <aside class="left">
     <button class="jam-btn" id="jamBtn" type="button" title="Capture the mouse to steer the wheel (Tab or Esc to exit)">
-      <kbd class="kc" data-kb="Tab" data-pad="Tab"></kbd>
+      <kbd class="kc" data-kb="Tab"></kbd>
       <svg class="jam-mouse" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="3" width="12" height="18" rx="6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
       <span class="jam-on">Exit Jam</span>
       <span class="jam-off">Enter Jam <small>mouse steers the wheel</small></span>
@@ -79,9 +86,9 @@
       <div class="ctl">
         <div class="ctl-label">Tempo</div>
         <div class="pill tempo">
-          <button id="tempoDown" aria-label="Slower"><kbd class="kc" data-kb="Z" data-pad="▼" data-touch="−"></kbd></button>
+          <button id="tempoDown" aria-label="Slower"><kbd class="kc" data-kb="Z" data-touch="−"></kbd></button>
           <output id="bpmOut" aria-live="polite">116</output>
-          <button id="tempoUp" aria-label="Faster"><kbd class="kc" data-kb="C" data-pad="▲" data-touch="+"></kbd></button>
+          <button id="tempoUp" aria-label="Faster"><kbd class="kc" data-kb="C" data-touch="+"></kbd></button>
         </div>
         <div class="ctl-sub" id="tempoSub">BPM</div>
       </div>
@@ -99,14 +106,14 @@
 
     <section class="fx" aria-label="Audio FX">
       <button class="fx-btn" id="fxBtn" aria-describedby="fxHint">
-        <kbd class="kc kc-lg" data-kb="F" data-pad="X"></kbd>
+        <kbd class="kc kc-lg" data-kb="F"></kbd>
         <span class="fx-text">Audio FX <em>(Hold)</em></span>
         <span class="fx-name" id="fxName">Low-pass</span>
       </button>
       <div class="fx-row">
-        <kbd class="kc fx-kc" data-kb="Q" data-pad="LT" aria-hidden="true"></kbd>
+        <kbd class="kc fx-kc" data-kb="Q" aria-hidden="true"></kbd>
         <div class="fx-picker" id="fxPicker" role="radiogroup" aria-label="Choose the effect"></div>
-        <kbd class="kc fx-kc" data-kb="E" data-pad="RT" aria-hidden="true"></kbd>
+        <kbd class="kc fx-kc" data-kb="E" aria-hidden="true"></kbd>
       </div>
       <p class="fx-hint" id="fxHint"></p>
     </section>
@@ -115,23 +122,25 @@
   </aside>
 
   <section class="right" aria-label="Song wheel">
-    <div class="wheel-wrap" id="wheelWrap">
-      <svg id="wheel" class="wheel"></svg>
-      <div class="hub" id="hub">
-        <svg class="hub-ring" id="hubRing" viewBox="0 0 300 300" aria-hidden="true"></svg>
-        <div class="hub-cats" role="tablist" aria-label="Layer to fill" id="hubCats"></div>
-        <div class="hub-body" id="hubBody" aria-live="polite">
-          <div class="hub-title" id="hubTitle">Groove</div>
-          <div class="hub-sub" id="hubSub"></div>
+    <div class="wheel-box">
+      <div class="wheel-wrap" id="wheelWrap">
+        <svg id="wheel" class="wheel"></svg>
+        <div class="hub" id="hub">
+          <svg class="hub-ring" id="hubRing" viewBox="0 0 300 300" aria-hidden="true"></svg>
+          <div class="hub-cats" role="tablist" aria-label="Layer to fill" id="hubCats"></div>
+          <div class="hub-body" id="hubBody" aria-live="polite">
+            <div class="hub-title" id="hubTitle">Groove</div>
+            <div class="hub-sub" id="hubSub"></div>
+          </div>
+          <kbd class="kc hub-kc" data-kb="" aria-hidden="true" title="Space: next layer"><svg viewBox="0 0 24 24"><path d="M5 10.5v5h14v-5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></kbd>
         </div>
-        <kbd class="kc hub-kc" data-kb="" data-pad="Y" aria-hidden="true" title="Space: next layer"><svg viewBox="0 0 24 24"><path d="M5 10.5v5h14v-5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></kbd>
       </div>
     </div>
 
     <div class="albums">
-      <button class="album-nav" id="albumPrev" aria-label="Previous album"><kbd class="kc" data-kb="A" data-pad="LB" data-touch="‹"></kbd></button>
+      <button class="album-nav" id="albumPrev" aria-label="Previous album"><kbd class="kc" data-kb="A" data-touch="‹"></kbd></button>
       <div class="album-strip" id="albumStrip" role="tablist" aria-label="Albums"></div>
-      <button class="album-nav" id="albumNext" aria-label="Next album"><kbd class="kc" data-kb="D" data-pad="RB" data-touch="›"></kbd></button>
+      <button class="album-nav" id="albumNext" aria-label="Next album"><kbd class="kc" data-kb="D" data-touch="›"></kbd></button>
     </div>
     <div class="album-name" id="albumName"></div>
   </section>
@@ -163,16 +172,6 @@
           <dt><kbd>←</kbd><kbd>→</kbd> <kbd>Enter</kbd></dt><dd>Step around the wheel, pick</dd>
           <dt><kbd>P</kbd> <kbd>R</kbd></dt><dd>Play/stop · random mix</dd>
           <dt><kbd>M</kbd> <kbd>Backspace</kbd></dt><dd>Mute / clear current layer</dd>
-        </dl>
-      </section>
-      <section><h3>Controller</h3>
-        <dl>
-          <dt>Left stick + <kbd>A</kbd></dt><dd>Point at a song, pick</dd>
-          <dt><kbd>Y</kbd></dt><dd>Next layer</dd>
-          <dt><kbd>LB</kbd><kbd>RB</kbd></dt><dd>Albums</dd>
-          <dt><kbd>X</kbd> (hold) · <kbd>LT</kbd><kbd>RT</kbd></dt><dd>Play / choose Audio FX</dd>
-          <dt>D-pad <kbd>▲</kbd><kbd>▼</kbd></dt><dd>Tempo</dd>
-          <dt><kbd>B</kbd> · <kbd>Start</kbd></dt><dd>Clear layer · play/stop</dd>
         </dl>
       </section>
     </div>

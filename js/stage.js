@@ -1,12 +1,11 @@
-// Background stage: a placeholder while the music visualizer is being redesigned, just a black
-// night sky with twinkling stars. A draft of a neon pyramid scene lives outside the repo in
-// ../visualizer-drafts/stage-pyramid.js.
+// Background stage. js/stage-pyramid.js is the show; this file picks it when the device can run
+// it, and otherwise (or if it fails to start) falls back to a black night sky with twinkling stars.
 //
-// The contract for a replacement (main.js calls it once):
+// The contract for a stage (main.js calls it once):
 //   createStage(canvas, getFrame)
 //   - canvas: the full-screen <canvas id="stage"> behind the interface.
 //   - getFrame(): call it on EVERY animation frame, even ones you skip drawing; it also advances
-//     the bar clock and polls game controllers. It returns:
+//     the bar clock. It returns:
 //       meters:   { groove, lead, texture: 0..1 levels of each layer's output,
 //                   bass, mid, high: 0..1 band energies, spectrum: Uint8Array(256) analyser bins,
 //                   beat: 0..1 phase within the beat, bar: 0..32 position in the loop,
@@ -18,6 +17,7 @@
 //       open:     [from, to] the open area between the side panels, as fractions of the width
 //                 ([0, 1] when the panels are stacked: phones, portrait)
 //       paused:   true while the help dialog covers the screen
+//       album:    album id of the first filled layer, or null
 //   - Respect prefers-reduced-motion, and keep frames cheap: the interface sits on top.
 
 const TAU = Math.PI * 2;
@@ -32,7 +32,7 @@ function rng(seed) {
   };
 }
 
-export function createStage(canvas, getFrame) {
+function createStarfield(canvas, getFrame) {
   const g = canvas.getContext('2d');
   const reduce = matchMedia('(prefers-reduced-motion: reduce)');
   let w = 0, h = 0, dpr = 1, t = 0, last = performance.now();
@@ -67,7 +67,7 @@ export function createStage(canvas, getFrame) {
   let lastDraw = 0;
   function frame(now) {
     requestAnimationFrame(frame);
-    const f = getFrame(); // every frame: it also advances the clock and polls the controller
+    const f = getFrame(); // every frame: it also advances the clock
     if (now - lastDraw < (f.paused ? 100 : 1000 / 30)) return; // stars don't need more than 30 fps
     lastDraw = now;
     resize();
@@ -87,5 +87,35 @@ export function createStage(canvas, getFrame) {
   }
 
   requestAnimationFrame(frame);
+  return {};
+}
+
+// WebGL2 on a real GPU. Software renderers would drag the whole page down, so they get the stars.
+function canRunShow() {
+  try {
+    const gl = document.createElement('canvas').getContext('webgl2');
+    if (!gl) return false;
+    const info = gl.getExtension('WEBGL_debug_renderer_info');
+    const name = info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : '';
+    gl.getExtension('WEBGL_lose_context')?.loseContext();
+    return !/swiftshader|llvmpipe|software|basic render/i.test(name);
+  } catch (_) { return false; }
+}
+
+export function createStage(canvas, getFrame) {
+  if (!canRunShow()) return createStarfield(canvas, getFrame);
+  // The show is downloaded after the app starts; keep the clock running meanwhile.
+  let loading = true;
+  const idle = () => { if (loading) { getFrame(); requestAnimationFrame(idle); } };
+  requestAnimationFrame(idle);
+  import('./stage-pyramid.js')
+    .then((m) => { m.createPyramid(canvas, getFrame); loading = false; })
+    .catch((err) => {
+      console.error('stage failed to start', err);
+      loading = false;
+      const fresh = canvas.cloneNode(); // a canvas that tried WebGL can't give a 2D context
+      canvas.replaceWith(fresh);
+      createStarfield(fresh, getFrame);
+    });
   return {};
 }

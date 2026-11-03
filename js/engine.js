@@ -87,7 +87,6 @@ function loadError(song, err) {
 // One bar in seconds, rounded to whole samples exactly like the rendered loops (loopSamples),
 // so the clock and every looping buffer share one grid.
 const barSec = (bpm = clockBpm) => (ctx ? Math.round(4 * 60 / bpm * ctx.sampleRate) / ctx.sampleRate : 4 * 60 / bpm);
-export const loopLenSec = () => BEATS / 4 * barSec();
 export const activeLayers = () => LAYERS.map((l) => l.id).filter((id) => state.layers[id].song);
 export const stemTypeFor = (layerId, song) =>
   LAYERS.find((l) => l.id === layerId).types.find((t) => MANIFEST[song].stems[t]);
