@@ -1,0 +1,20 @@
+name: Feature idea
+description: Suggest something new or a change to how something works
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What's your idea?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why would it make jamming better?
+      description: What are you trying to do that's hard or impossible right now?
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Sketches, examples from other apps or links.

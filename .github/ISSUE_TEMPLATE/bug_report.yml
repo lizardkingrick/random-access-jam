@@ -1,0 +1,48 @@
+name: Bug report
+description: Something sounds wrong, looks wrong or doesn't work
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for reporting! The more detail you give, the faster it gets fixed.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Pick Get Lucky as Groove
+        2. Set the tempo to 128
+        3. Hold F with Tape stop selected
+  - type: input
+    id: share
+    attributes:
+      label: Share link
+      description: Press Share in the app and paste the link. It recreates your exact mix.
+      placeholder: https://dreamchamberremixed.xyz/#g=...
+  - type: input
+    id: device
+    attributes:
+      label: Device and browser
+      placeholder: e.g. iPhone 15, Safari 18 / Windows 11, Chrome 131
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where were you running it?
+      options:
+        - The live site (dreamchamberremixed.xyz)
+        - Locally with start.cmd
+        - Locally with Node (npm run dev or serve-live)
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Screenshots, screen recordings or console errors help a lot.
