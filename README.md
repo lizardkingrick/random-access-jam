@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/media/logo.svg" alt="Dream Chamber Remixed logo" width="120">
+
 # Dream Chamber Remixed
 
 **Jam with Daft Punk stems in your browser.**<br>

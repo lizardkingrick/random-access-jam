@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- New logo: a ring of three coloured segments (one per layer) around a play button, in the top
+  bar, the browser tab and the home-screen icon. `python tools/build-icons.py` draws the icons
 - Faster start, sound unchanged: the song list no longer waits for the local server's file
   listing (a 404 on the hosted site, one round trip before any stem could start), a shared mix's
   stems start downloading before the stage is set up, and the stage's show (three.js and the

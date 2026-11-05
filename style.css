@@ -81,7 +81,7 @@ button { cursor: pointer; background: none; border: 0; }
 
 /* ---------- top bar ---------- */
 .brand { display: flex; align-items: center; gap: calc(12 * var(--u)); min-width: 0; }
-.brand-mark { width: calc(38 * var(--u)); height: calc(38 * var(--u)); color: var(--texture); filter: drop-shadow(0 0 calc(10 * var(--u)) rgba(47, 140, 255, 0.7)); flex: none; }
+.brand-mark { width: calc(38 * var(--u)); height: calc(38 * var(--u)); flex: none; }
 .brand h1 {
   font: 400 calc(24 * var(--u))/1 var(--display);
   letter-spacing: 0.05em;

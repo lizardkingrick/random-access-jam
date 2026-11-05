@@ -1,49 +1,47 @@
-# Draws the home-screen icons in icons/: the brand mark (three glowing blue strokes, as in the top
-# bar) on the app's night-blue background. The mark stays inside the middle 60%, so one image works
-# both as a plain icon and as a maskable one (Android crops it to a circle or a squircle, iOS rounds
-# the corners).
+# Draws the home-screen icons in icons/: the brand mark (a ring of three coloured segments, one per
+# layer, around a play button, as in the top bar) on the app's night background. The icons are full
+# squares with no transparent corners. The ring stays inside the middle 80%, so one image works both
+# as a plain icon and as a maskable one (Android crops it to a circle or a squircle, iOS rounds the
+# corners).
 # Usage:  python tools/build-icons.py
+import math
 from pathlib import Path
-from PIL import Image, ImageChops, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw
 
 OUT = Path(__file__).resolve().parent.parent / 'icons'
 SIZES = {'icon-192.png': 192, 'icon-512.png': 512, 'apple-touch-icon.png': 180}
 
-# The brand mark from index.html, in its 48-unit viewBox: three strokes, 5 wide, round caps.
-STROKES = [((8, 26), (24, 10)), ((10, 38), (34, 14)), ((22, 40), (40, 22))]
-STROKE_W = 5
-MARK_BOX = (5.5, 7.5, 42.5, 42.5)  # the strokes' extent, caps included
-BLUE = (47, 140, 255)
-BG_TOP, BG_BOTTOM = (11, 16, 64), (3, 4, 12)  # the hub's gradient
+# The brand mark from index.html, in its 100-unit viewBox: three arcs of radius 33, 11.7 wide,
+# centred on (50, 50). Angles are in degrees, clockwise from 3 o'clock (screen coordinates).
+CENTRE, RADIUS, WIDTH = 50, 33, 11.7
+ARCS = [
+    ((2, 191, 241), 212.0, 328.0),  # top: blue
+    ((0, 231, 172), 336.0, 444.0),  # right: green (336° round to 84°)
+    ((186, 60, 242), 96.0, 204.0),  # left: purple
+]
+PLAY = [(44.7, 39.4), (62.9, 50.0), (44.7, 60.6)]  # the play triangle (corners rounded below)
+BG = (3, 4, 12)
 
 
-def draw(size, ss=4):
+def draw(size, ss=8):
     n = size * ss
-    # background: a soft vertical fade, lighter at the top like the hub
-    bg = Image.new('RGB', (n, n))
-    px = ImageDraw.Draw(bg)
-    for y in range(n):
-        t = y / (n - 1)
-        px.line([(0, y), (n, y)], fill=tuple(round(a + (b - a) * t) for a, b in zip(BG_TOP, BG_BOTTOM)))
-
-    # the mark, scaled to 60% of the icon and centred
-    x0, y0, x1, y1 = MARK_BOX
-    scale = 0.6 * n / max(x1 - x0, y1 - y0)
-    ox = n / 2 - (x0 + x1) / 2 * scale
-    oy = n / 2 - (y0 + y1) / 2 * scale
-    mark = Image.new('L', (n, n), 0)
-    md = ImageDraw.Draw(mark)
-    w = STROKE_W * scale
-    for (ax, ay), (bx, by) in STROKES:
-        a, b = (ox + ax * scale, oy + ay * scale), (ox + bx * scale, oy + by * scale)
-        md.line([a, b], fill=255, width=round(w))
-        for cx, cy in (a, b):
-            md.ellipse([cx - w / 2, cy - w / 2, cx + w / 2, cy + w / 2], fill=255)
-
-    # glow under the strokes, then the strokes themselves
-    glow = mark.filter(ImageFilter.GaussianBlur(n * 0.035)).point(lambda v: v * 0.85)
-    out = ImageChops.add(bg, Image.merge('RGB', [glow.point(lambda v, c=c: v * c / 255) for c in BLUE]))
-    out.paste(Image.new('RGB', (n, n), BLUE), mask=mark)
+    k = n / 100
+    out = Image.new('RGB', (n, n), BG)
+    d = ImageDraw.Draw(out)
+    # each arc as a filled ring sector, so the ends are cut square like the SVG's butt caps
+    for colour, a0, a1 in ARCS:
+        steps = 96
+        outer = [(CENTRE + (RADIUS + WIDTH / 2) * math.cos(math.radians(a0 + (a1 - a0) * i / steps)),
+                  CENTRE + (RADIUS + WIDTH / 2) * math.sin(math.radians(a0 + (a1 - a0) * i / steps))) for i in range(steps + 1)]
+        inner = [(CENTRE + (RADIUS - WIDTH / 2) * math.cos(math.radians(a1 - (a1 - a0) * i / steps)),
+                  CENTRE + (RADIUS - WIDTH / 2) * math.sin(math.radians(a1 - (a1 - a0) * i / steps))) for i in range(steps + 1)]
+        d.polygon([(x * k, y * k) for x, y in outer + inner], fill=colour)
+    # the play button: a triangle with softly rounded corners
+    r = 1.2
+    d.polygon([(x * k, y * k) for x, y in PLAY], fill=(255, 255, 255))
+    d.line([(x * k, y * k) for x, y in PLAY + PLAY[:1]], fill=(255, 255, 255), width=round(2 * r * k), joint='curve')
+    for x, y in PLAY:
+        d.ellipse([(x - r) * k, (y - r) * k, (x + r) * k, (y + r) * k], fill=(255, 255, 255))
     return out.resize((size, size), Image.LANCZOS)
 
 
