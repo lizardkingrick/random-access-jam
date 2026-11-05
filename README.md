@@ -1,8 +1,6 @@
 <div align="center">
 
-<img src="docs/media/logo.svg" alt="Dream Chamber Remixed logo" width="120">
-
-# Dream Chamber Remixed
+<img src="docs/media/banner.png" alt="Dream Chamber Remixed" width="640">
 
 **Jam with Daft Punk stems in your browser.**<br>
 Pick a groove, a lead and an extra from different songs. Every pick lands in tempo and in key.
@@ -14,7 +12,7 @@ Pick a groove, a lead and an extra from different songs. Every pick lands in tem
 ![No install](https://img.shields.io/badge/no%20account%2C%20no%20install-b964ff?style=flat-square)
 ![Works on phones](https://img.shields.io/badge/desktop%20%C2%B7%20phone%20%C2%B7%20tablet-2f8cff?style=flat-square)
 
-<a href="https://dreamchamberremixed.xyz"><img src="docs/media/screenshot-desktop.jpg" alt="Dream Chamber Remixed: three layers playing over the neon pyramid stage, with the radial song wheel on the right" width="100%"></a>
+<a href="https://dreamchamberremixed.xyz"><img src="docs/media/hero.webp" alt="Dream Chamber Remixed on desktop and phone: three layers playing over the neon pyramid stage, with the radial song wheel" width="100%"></a>
 
 </div>
 
@@ -26,8 +24,6 @@ songs on a radial song wheel. Each stem is time-stretched to one tempo and pitch
 key, so any combination you pick stays in sync. Everything runs in the browser.
 
 ## Features
-
-<img src="docs/media/screenshot-phone.jpg" alt="The phone layout: song wheel, album rail, three layer rows and the effects bar" width="230" align="right">
 
 - 🎡 **Radial song wheel.** One page per album. The hub switches layers and counts through the
   32-bar loop.
@@ -46,8 +42,6 @@ key, so any combination you pick stays in sync. Everything runs in the browser.
   jam or export a 32-bar loop as a WAV.
 - 📱 **Keyboard, mouse and touch**, with layouts for phones held either way. You can install it
   to your home screen.
-
-<br clear="right">
 
 ## Controls
 
