@@ -1,0 +1,188 @@
+/* Solid look: a modern app's flat, opaque surfaces over the stage. Neutral greys in clear steps
+   (panel, raised card, control), a hairline edge instead of a glow, one modern sans throughout,
+   and the colour of the layer being filled for the chosen thing in each group. No blur, no
+   gradients.
+   Loaded after style.css; it changes colour, shape and type only, so every layout's sizes still
+   come from style.css. */
+:root {
+  --sans: 'Geist', 'Barlow', system-ui, sans-serif;
+  --base: #111114;
+  --raised: #1a1a1f;
+  --control: #26262d;
+  --control-hover: #31313a;
+  --hairline: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  --lift: 0 calc(12 * var(--u)) calc(32 * var(--u)) rgba(0, 0, 0, 0.45);
+  --solid: #f5f5f7;
+  --solid-ink: #111114;
+  --primary: #1b9dff;
+  /* the chosen thing in each group takes the colour of the layer being filled */
+  --accent: var(--groove);
+  --soft: rgba(240, 240, 245, 0.62);
+  --r-window: calc(20 * var(--u));
+  --r-card: calc(14 * var(--u));
+}
+:root:has(.hub[data-layer="lead"]) { --accent: var(--lead); }
+:root:has(.hub[data-layer="texture"]) { --accent: var(--texture); }
+
+/* ---------- type: one modern sans throughout ---------- */
+body, .tbtn, .jam-btn, .ctl-label, .ctl-sub, .fx-text, .fx-name, .fx-chip span, .fx-hint, .layer-song,
+.layer-sub, .album-name, .hub-sub, .toast, .help, .help h3, .help-close, .kc, .clock-bar, .tempo output,
+.key select, .brand p, .brand .ver { font-family: var(--sans); }
+.brand h1, .hub-title, .help h2 { font-family: var(--sans); font-weight: 700; letter-spacing: -0.01em; }
+.hub-title { text-transform: none; text-shadow: none; }
+/* "Remixed" in the logo ring's three colours, drifting slowly through the letters */
+.brand h1 span {
+  background: linear-gradient(90deg, #02bff1, #00e7ac, #ba3cf2, #02bff1) 0 0 / 300% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: remixed 8s linear infinite;
+}
+@keyframes remixed { to { background-position: 150% 0; } }
+@media (prefers-reduced-motion: reduce) { .brand h1 span { animation: none; } }
+.hub.peek .hub-title { font-family: var(--sans); font-weight: 700; }
+.ctl-sub, .album-name, .fx-chip span, .brand p, .hub-sub, .tbtn, .help h3, .help-close, .fx-name, .clock-bar {
+  text-transform: none; letter-spacing: 0;
+}
+.tempo output, .clock-bar { font-weight: 600; font-variant-numeric: tabular-nums; }
+.key select { font-weight: 600; }
+.layer-song { font-weight: 600; letter-spacing: -0.005em; }
+/* Geist runs wider than the condensed face: the effect names tighten up to fit their chips. */
+.fx-chip span { font-weight: 500; letter-spacing: -0.03em; }
+.ctl-sub, .fx-hint, .album-name, .fx-text em { color: var(--soft); }
+.fx-text em { font-family: var(--sans); text-transform: none; letter-spacing: 0; }
+
+/* ---------- surfaces ---------- */
+.clock, .master-vol, .fx-picker, .albums, .toast, .help, .layer, .pill {
+  background: var(--base); border: 0; box-shadow: var(--hairline), var(--lift); backdrop-filter: none;
+}
+.fx-picker, .albums, .help { border-radius: var(--r-window); }
+.layer { border-radius: var(--r-card); }
+.pill { border-radius: calc(999 * var(--u)); color: var(--text); }
+.toast { border-radius: calc(999 * var(--u)); }
+.toast.error { background: #3d0d18; }
+.help::backdrop { background: rgba(0, 0, 0, 0.7); }
+
+/* ---------- controls: grey on the panels; Play is solid in the layer's colour ---------- */
+.tbtn, .ibtn, .jam-btn { background: var(--control); border: 0; box-shadow: var(--hairline); }
+.tbtn:hover, .ibtn:hover, .jam-btn:hover { background: var(--control-hover); border-color: transparent; }
+/* The album arrows are just their A / D keys, with no box behind them. */
+.album-nav, .album-nav:hover { background: none; box-shadow: none; }
+.album-nav:hover .kc { background: var(--control-hover); }
+.tbtn:active, .ibtn:active { transform: scale(0.96); }
+.jam-btn small, .jam-mouse { color: var(--soft); }
+body.jamming .jam-btn { background: transparent; box-shadow: none; }
+.help-close { background: var(--primary); color: #fff; box-shadow: none; }
+.tbtn-play, .tbtn-play:hover { background: var(--accent); color: var(--solid-ink); box-shadow: none; transition: background 0.2s, transform 0.1s; }
+.tbtn-play:hover { background: color-mix(in srgb, var(--accent) 82%, #fff); }
+.tbtn-rec.active { background: var(--danger); animation: none; box-shadow: none; }
+.layer.muted .ibtn-mute { background: var(--danger); }
+.brand .ver { background: var(--control); color: var(--text); border: 0; }
+
+/* key hints are quiet grey caps, not white ones */
+.kc { background: var(--control); color: var(--text); box-shadow: var(--hairline); border-radius: calc(7 * var(--u)); }
+.pill button:hover { background: var(--control); }
+.pill button .kc { background: var(--control); color: var(--text); border-radius: 50%; }
+.tempo.pending output { color: #9cc8ff; }
+.key select { color: var(--text); background-image: linear-gradient(45deg, transparent 50%, var(--text) 50%), linear-gradient(135deg, var(--text) 50%, transparent 50%); }
+/* the key menu the browser opens: dark, to match (Safari on Mac draws its own native menu) */
+.key select { color-scheme: dark; }
+.key select option { background: var(--raised); color: var(--text); }
+.key select option:checked { background: var(--control-hover); }
+.lock { color: var(--text); }
+.lock[aria-pressed="false"] { color: rgba(255, 255, 255, 0.35); }
+
+.beat-dots i { background: var(--control-hover); }
+.beat-dots i.on { background: var(--soft); box-shadow: none; }
+.beat-dots i.on:first-child { background: #fff; box-shadow: none; }
+
+/* Effects: the hold button is a round grey key with its letter in the layer's colour; held, it
+   lights up solid. The chosen effect has no box round it: its icon and name light up in the
+   colour instead. */
+.fx-name { background: var(--control); color: var(--text); border: 0; }
+.fx-btn:hover { background: none; }
+.fx-btn.held { background: none; box-shadow: none; }
+.fx-btn .kc-lg { background: var(--control); color: var(--accent); box-shadow: var(--hairline); transition: background 0.1s, color 0.1s, transform 0.1s; }
+.fx-btn:hover .kc-lg { background: var(--control-hover); }
+.fx-btn.held .kc-lg { background: var(--accent); color: var(--solid-ink); transform: scale(0.94); }
+.fx-btn.held .fx-name { background: var(--accent); color: var(--solid-ink); }
+/* Each chip is as wide as its name plus an even share of the spare room, so the long names
+   (High-pass, Tape stop) get space round them when highlighted instead of touching the edges. */
+.fx-chip { flex: 1 1 auto; padding-inline: calc(6 * var(--u)); border-radius: calc(13 * var(--u)); color: var(--soft); }
+.fx-chip:hover { background: none; color: var(--text); }
+.fx-chip[aria-checked="true"] { background: none; box-shadow: none; color: var(--accent); }
+/* held: the chosen one flashes white on every beat, then settles back to the colour */
+.fx-picker.held .fx-chip[aria-checked="true"] { animation: fxbeat calc(60s / var(--bpm, 120)) ease-out infinite; }
+@keyframes fxbeat { 0% { color: #fff; } }
+
+.album { border-radius: calc(8 * var(--u)); border-color: transparent; }
+.album[aria-selected="true"] { border-color: var(--accent); box-shadow: none; }
+
+/* ---------- layer cards ---------- */
+.layer.current { background: var(--raised); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 65%, transparent), var(--lift); }
+.layer-icon { border-radius: calc(10 * var(--u)); background: var(--control); }
+.layer.current .layer-icon, .layer[data-layer="texture"].current .layer-icon { background: var(--c); color: var(--solid-ink); }
+.layer-sub { color: var(--soft); }
+
+/* ---------- sliders: thin track in the layer's colour, round white thumb ---------- */
+input[type="range"] { --c: var(--accent); }
+.layer input[type="range"] { --c: inherit; } /* each card's volume in its own layer's colour */
+input[type="range"]::-webkit-slider-thumb { background: #fff; box-shadow: 0 1px calc(4 * var(--u)) rgba(0, 0, 0, 0.5); }
+
+/* ---------- the wheel: a solid dark disc, the picked song in the layer's colour ---------- */
+.wheel-wrap { isolation: isolate; }
+.wheel-wrap::before {
+  content: ''; position: absolute; inset: 1.3%; z-index: -1; border-radius: 50%;
+  background: #0b0b0d; box-shadow: var(--lift); /* no light edge: it outlined the wheel */
+}
+.seg-shape { fill: var(--raised); stroke: var(--raised); transition: fill 0.15s, stroke 0.15s; }
+.seg-label { font-family: var(--sans); font-weight: 600; fill: rgba(240, 240, 245, 0.78); letter-spacing: -0.01em; }
+.seg.focus .seg-shape, .seg:focus-visible .seg-shape { fill: var(--control-hover); stroke: var(--control-hover); }
+.seg:focus-visible .seg-shape { stroke: #8a8a96; }
+.seg.focus .seg-label { fill: #fff; }
+.seg.active .seg-shape { fill: var(--accent); stroke: var(--accent); }
+.seg.active { filter: none; }
+.seg.active .seg-label { fill: var(--solid-ink); }
+.seg.disabled .seg-shape { fill: #141417; stroke: #141417; opacity: 1; }
+.seg.disabled.focus .seg-shape { fill: #18181c; stroke: #18181c; }
+/* a song still loading pulses towards the layer's colour it's about to take */
+@keyframes segpulse { to { fill: var(--accent); stroke: var(--accent); } }
+.wheel-sel { filter: none; }
+
+/* The hub is the darkest step, in the middle. */
+.hub { background: var(--base); box-shadow: var(--hairline), 0 0 0 calc(3 * var(--u)) #0b0b0d; }
+.hub-sub { color: var(--soft); }
+.hub-ring .phrase { stroke: rgba(255, 255, 255, 0.1); }
+.hub-cat { background: var(--control); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 45%, transparent); }
+/* No space-bar badge in the hub: the layer buttons beside the selected one already show you can
+   switch, and the help lists Space. The hub's text gets the badge's slot instead (21.1–45.6). */
+.hub-kc { display: none; }
+.hub-body { margin-bottom: 4.4cqw; }
+.hub-cat[aria-selected="true"] { box-shadow: inset 0 0 0 0.5cqw var(--c); }
+.hub-cat[aria-selected="true"] svg { filter: none; }
+
+/* ---------- Audio FX on desktop and tablets: one card ---------- */
+/* The hold control is a wide bar across the top (key, title, the chosen effect's name) that
+   fills with the layer's colour while held; the effect choices and their description sit under
+   it. Phones keep their compact row from style.css. */
+@media (min-width: 700px) and (min-height: 541px) {
+  .fx {
+    padding: calc(10 * var(--u)); gap: calc(8 * var(--u)); border-radius: var(--r-window);
+    background: var(--base); box-shadow: var(--hairline), var(--lift);
+  }
+  .fx .fx-btn {
+    align-self: stretch; padding: calc(6 * var(--u)) calc(8 * var(--u)) calc(6 * var(--u)) calc(6 * var(--u));
+    border-radius: calc(999 * var(--u)); background: var(--control); box-shadow: var(--hairline);
+    transition: background 0.1s;
+  }
+  .fx .fx-btn:hover { background: var(--control-hover); }
+  .fx-text { text-shadow: none; font-size: calc(19 * var(--u)); font-weight: 600; }
+  .fx-text em { color: var(--soft); font-weight: 500; }
+  .fx-name { margin-left: auto; }
+  .fx-btn .kc-lg { background: var(--raised); }
+  .fx .fx-btn.held { background: var(--accent); color: var(--solid-ink); }
+  .fx-btn.held .fx-text em { color: color-mix(in srgb, var(--solid-ink) 65%, transparent); }
+  .fx-btn.held .kc-lg { background: var(--solid-ink); color: var(--accent); }
+  .fx-btn.held .fx-name { background: var(--solid-ink); color: var(--accent); }
+  .fx-row { padding-left: 0; }
+  .fx-picker { background: none; box-shadow: none; padding: 0; }
+  .fx-hint { text-shadow: none; margin: 0 0 0 calc(4 * var(--u)); }
+}

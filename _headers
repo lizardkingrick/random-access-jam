@@ -18,6 +18,8 @@
   Cache-Control: no-cache
 /style.css
   Cache-Control: no-cache
+/solid.css
+  Cache-Control: no-cache
 /manifest.webmanifest
   Cache-Control: no-cache
 

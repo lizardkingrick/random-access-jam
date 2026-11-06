@@ -52,12 +52,12 @@ function buildHub() {
     const b = e.target.closest('.hub-cat');
     if (b) setLayer(b.dataset.layer);
   });
-  // The ring round the hub = position in the 32-bar loop, as four 8-bar phrases, with a halo
-  // under them that flashes on each beat.
+  // The ring round the hub = position in the 32-bar loop, as four 8-bar phrases. On each beat
+  // the four lines flash (the halo: the same arcs, under the fills).
   const r = 143, at = (deg) => { const a = (deg - 90) * Math.PI / 180; return `${150 + r * Math.cos(a)} ${150 + r * Math.sin(a)}`; };
   const phrases = [0, 1, 2, 3].map((q) => `M${at(q * 90 + 3)} A${r} ${r} 0 0 1 ${at(q * 90 + 87)}`);
-  $('#hubRing').innerHTML = `<circle class="beat-halo" cx="150" cy="150" r="${r}"/>`
-    + phrases.map((d) => `<path class="phrase" d="${d}"/>`).join('')
+  $('#hubRing').innerHTML = phrases.map((d) => `<path class="phrase" d="${d}"/>`).join('')
+    + `<g class="beat-halo">${phrases.map((d) => `<path d="${d}"/>`).join('')}</g>`
     + phrases.map((d) => `<path class="phrase-fill" d="${d}" pathLength="1"/>`).join('');
   ringFills = [...$('#hubRing').querySelectorAll('.phrase-fill')];
   ringHalo = $('#hubRing').querySelector('.beat-halo');

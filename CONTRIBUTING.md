@@ -54,6 +54,7 @@ and needs no audio.
 | Path | What it is |
 |---|---|
 | `index.html`, `style.css` | Layout and styling. Under 960px wide it stacks vertically for phones. |
+| `solid.css` | The look on top of `style.css`: colours, type and shapes (grey surfaces, the layer colours, Geist). It changes no sizes |
 | `js/engine.js` | Audio graph, stem loading and conforming, transport, FX, record and export |
 | `js/stretch-worker.js` | WSOLA time-stretch and pitch-shift (MuscularCrab), with drum hits pinned to the beat |
 | `js/loudness.js` | Measures each stem's integrated loudness (BS.1770) for the level trims |

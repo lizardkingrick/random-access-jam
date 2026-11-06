@@ -1,9 +1,32 @@
 # Changelog
 
-## Unreleased
+## 1.2.0-beta (2026-11-06)
 
-- New logo: a ring of three coloured segments (one per layer) around a play button, in the top
-  bar, the browser tab and the home-screen icon. `python tools/build-icons.py` draws the icons
+- A new look (`solid.css`, loaded after `style.css`): solid neutral-grey panels, cards and
+  buttons in clear steps instead of see-through navy, fine edges and soft shadows instead of
+  glows, and one modern typeface (Geist) in normal case throughout. The song wheel is a dark
+  disc with grey slices, and the hub is the darkest grey in the middle
+- The colour of the layer being filled (green Groove, purple Lead, blue Extra) marks what's
+  chosen everywhere: the picked song on the wheel, the Play button, the chosen effect, the
+  selected album and the master volume. Each layer card's volume uses its own layer's colour. A
+  song still loading pulses towards that colour instead of white
+- "Remixed" in the title drifts through the logo's three colours (it holds still with motion
+  reduced)
+- Audio FX on desktop and tablets is one card: a wide hold bar that fills with the layer's
+  colour while held, the effects under it and their description below. The chosen effect has
+  no box round it, just its icon and name in the colour, flashing white on the beat while held;
+  each effect is as wide as its name, so long names aren't cramped
+- The key menu opens dark to match, key hints are grey caps instead of white ones, and the album
+  arrows are just their A / D keys, with no box behind them
+- The layer buttons in the hub are a dial: the selected layer always sits big in the middle at
+  the top, with the previous and next layers smaller and a little lower either side, clear of the
+  bar ring; changing layer swings them round. The space-bar badge under them is gone (the help
+  still lists Space), and a long song name in the hub stops at two lines
+- The bar ring round the hub is four 8-bar phrases instead of 32 dashes: the phrase playing fills
+  smoothly and glows, and the four lines flash softly on each beat (off with reduced motion)
+- New logo: a ring of three equal coloured segments (one per layer), cut by straight, even gaps,
+  around a play button, in the top bar, the browser tab and the home-screen icon.
+  `python tools/build-icons.py` draws the icons
 - Faster start, sound unchanged: the song list no longer waits for the local server's file
   listing (a 404 on the hosted site, one round trip before any stem could start), a shared mix's
   stems start downloading before the stage is set up, and the stage's show (three.js and the

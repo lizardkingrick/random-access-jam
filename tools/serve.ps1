@@ -23,7 +23,7 @@
   -TrustedProxy  addresses or ranges of the reverse proxy, comma-separated without spaces, e.g.
            10.0.0.2 (default: this computer, 127.0.0.1 and ::1).
 
-  Every mode serves only the app's own files (index.html, style.css, stems.json, the web app
+  Every mode serves only the app's own files (index.html, style.css, solid.css, stems.json, the web app
   manifest and icons, the scripts and images under js/, and
   covers/ if you've built them) and the media files it lists, sends security headers, streams
   files in parallel, drops clients that stall, and limits how much each visitor can request.
@@ -183,7 +183,7 @@ function Get-Listing([string]$dir, [string[]]$exts, [string]$prefix = '', [int]$
 
 function Update-Catalog {
   $files = New-Object 'Collections.Generic.Dictionary[string,string]' ([StringComparer]::OrdinalIgnoreCase)
-  foreach ($rel in 'index.html', 'style.css', 'stems.json', 'manifest.webmanifest') {
+  foreach ($rel in 'index.html', 'style.css', 'solid.css', 'stems.json', 'manifest.webmanifest') {
     $p = Join-Path $AppRoot $rel
     if (Test-Path -LiteralPath $p -PathType Leaf) { $files[$rel] = $p }
   }

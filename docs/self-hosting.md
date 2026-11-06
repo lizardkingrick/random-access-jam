@@ -34,7 +34,7 @@ To point it somewhere else: `start.cmd -Stems "D:\Daft Punk\Stems" -Extras "D:\D
 
 In every mode, including `-Public` below, the server does the following:
 
-- It serves only the app (`index.html`, `style.css`, `stems.json`, the web app manifest and icons,
+- It serves only the app (`index.html`, `style.css`, `solid.css`, `stems.json`, the web app manifest and icons,
   the scripts and images under `js/`, and `covers/` if you've built them) and the media files it
   lists. It never serves the rest of the repo, links out of the media folders, or anything else on
   disk.

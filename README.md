@@ -5,14 +5,14 @@
 **Jam with Daft Punk stems in your browser.**<br>
 Pick a groove, a lead and an extra from different songs. Every pick lands in tempo and in key.
 
-[![Play now](https://img.shields.io/badge/%E2%96%B6%20Play%20now-dreamchamberremixed.xyz-1b9dff?style=for-the-badge)](https://dreamchamberremixed.xyz)
+[![Play now](https://img.shields.io/badge/%E2%96%B6%20Play%20now-dreamchamberremixed.xyz-34e27f?style=for-the-badge)](https://dreamchamberremixed.xyz)
 
-[![Version](https://img.shields.io/badge/version-1.0%20beta-ffcf5c?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.2%20beta-02bff1?style=flat-square)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-34e27f?style=flat-square)](LICENSE)
 ![No install](https://img.shields.io/badge/no%20account%2C%20no%20install-b964ff?style=flat-square)
 ![Works on phones](https://img.shields.io/badge/desktop%20%C2%B7%20phone%20%C2%B7%20tablet-2f8cff?style=flat-square)
 
-<a href="https://dreamchamberremixed.xyz"><img src="docs/media/hero.webp" alt="Dream Chamber Remixed on desktop and phone: three layers playing over the neon pyramid stage, with the radial song wheel" width="100%"></a>
+<a href="https://dreamchamberremixed.xyz"><img src="docs/media/hero.webp" alt="Dream Chamber Remixed on desktop and phone: three layers playing over the pyramid stage, with the radial song wheel and the picked song in the Groove layer's green" width="100%"></a>
 
 </div>
 
@@ -25,8 +25,11 @@ key, so any combination you pick stays in sync. Everything runs in the browser.
 
 ## Features
 
-- 🎡 **Radial song wheel.** One page per album. The hub switches layers and counts through the
-  32-bar loop.
+- 🎡 **Radial song wheel.** One page per album. The hub turns between layers like a dial, and
+  its ring counts the 32-bar loop as four 8-bar phrases that pulse on the beat.
+- 🎨 **Colour-coded layers.** Groove is green, Lead purple and Extra blue. Whatever you pick for
+  the layer you're filling (the song, the effect, the album, even the Play button) takes its
+  colour, so you always know where a pick will land.
 - 🎚️ **Auto-sync.** WSOLA time-stretch to any tempo from 80 to 140 BPM, rendered in parallel
   worker threads. Key lock moves every stem into one key, and a major key is treated as its
   relative minor, so A major mixes with F♯m untouched. Song swaps land on the next bar.

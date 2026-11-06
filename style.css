@@ -360,33 +360,35 @@ body.jamming .jam-btn { background: transparent; border-color: transparent; }
 .hub-ring .phrase-fill { stroke: color-mix(in srgb, var(--hc) 45%, transparent); opacity: 0; }
 .hub-ring .phrase-fill.on { opacity: 1; }
 .hub-ring .phrase-fill.now { stroke: var(--hc); filter: drop-shadow(0 0 calc(4 * var(--u)) var(--hc)); }
-.hub-ring .beat-halo { fill: none; stroke: var(--hc); stroke-width: 9; stroke-opacity: 0; }
+.hub-ring .beat-halo { fill: none; stroke: var(--hc); stroke-width: 5; stroke-linecap: round; stroke-opacity: 0; }
 /* Hub layout, in cqw of the wheel (the hub is 50cqw tall, the bar ring's inner edge sits
    ~1.6cqw in): layer buttons 5.5–19.5, body 21.1–40.6, key badge 41–45.6. Nothing grows
    outside its slot, so the pieces can't overlap at any wheel size. The layer buttons are a
-   dial: they hang on an arc swung from a pivot above the hub, the selected layer at the
-   bottom of it (big, in the middle of the slot) and the previous / next layer small and dim
-   up either side. Changing layer swings --a, so the buttons turn round the arc. */
+   dial: they sit on an arc round a pivot below them, the selected layer big at the top of it
+   (5.5–18.5) and the previous / next layer smaller, lower down either side (centres 4cqw
+   lower, ~12.25–19.75). Down there the hub is wide, so the side ones stay well clear of the
+   bar ring (their outer edge is ~19.4cqw from the centre, the ring's inner edge 23.4).
+   Changing layer swings --a, so the buttons turn round the arc. */
 @property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
 .hub-cats { position: relative; width: 100%; height: 14cqw; margin-top: 5.5cqw; }
 .hub-cat {
   --a: 0deg;
-  position: absolute; left: calc(50% + 17cqw * sin(var(--a))); top: calc(17cqw * cos(var(--a)) - 9.5cqw);
+  position: absolute; left: calc(50% + 21.5cqw * sin(var(--a))); top: calc(28cqw - 21.5cqw * cos(var(--a)));
   transform: translate(-50%, -50%);
-  width: 6cqw; height: 6cqw; border-radius: 50%;
+  width: 7.5cqw; height: 7.5cqw; border-radius: 50%;
   display: grid; place-items: center;
-  color: var(--c); opacity: 0.45;
+  color: var(--c); opacity: 0.7;
   background: rgba(255, 255, 255, 0.04);
   transition: opacity 0.15s, background 0.15s, box-shadow 0.15s, width 0.25s, height 0.25s, --a 0.25s ease-out;
 }
-.hub-cat[data-pos="-1"] { --a: -40deg; }
-.hub-cat[data-pos="1"] { --a: 40deg; }
+.hub-cat[data-pos="-1"] { --a: -35.5deg; }
+.hub-cat[data-pos="1"] { --a: 35.5deg; }
 /* the one that wraps round (previous <-> next) crosses the middle hidden */
 .hub-cat.wrap { opacity: 0; transition-duration: 0s, 0.15s, 0.15s, 0.25s, 0.25s, 0.25s; }
 .hub-cat svg { width: 60%; height: 60%; }
 /* A bigger touch target than the icon: the small ones are only ~20px across on a phone. */
 .hub-cat::after { content: ''; position: absolute; inset: -2.2cqw; border-radius: 50%; }
-.hub-cat:hover { opacity: 0.9; }
+.hub-cat:hover { opacity: 1; }
 .hub-cat[aria-selected="true"] { z-index: 1; width: 13cqw; height: 13cqw; opacity: 1; background: color-mix(in srgb, var(--c) 24%, transparent); box-shadow: inset 0 0 0 0.6cqw var(--c), 0 0 4cqw color-mix(in srgb, var(--c) 50%, transparent); }
 .hub-cat[aria-selected="true"] svg { width: 60%; height: 60%; filter: drop-shadow(0 0 calc(6 * var(--u)) color-mix(in srgb, var(--c) 70%, transparent)); }
 .hub-cat[data-layer="groove"] { --c: var(--groove); }
@@ -395,7 +397,11 @@ body.jamming .jam-btn { background: transparent; border-color: transparent; }
 .hub-body { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; width: 76%; margin-top: 1.6cqw; margin-bottom: 9.4cqw; pointer-events: none; }
 .hub-title { font: 400 7cqw/1 var(--display); text-transform: uppercase; letter-spacing: 0.02em; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.5); max-width: 100%; }
 .hub-sub { font: 600 max(10px, 2.5cqw)/1.25 var(--ui); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-top: 0.8cqw; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hub.peek .hub-title { font-size: 4.6cqw; line-height: 1.05; text-transform: none; font-family: var(--ui); font-weight: 800; }
+.hub.peek .hub-title { font-size: 4.6cqw; line-height: 1.05; text-transform: none; font-family: var(--ui); font-weight: 800; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+/* Showing a song, the hub can need four lines (a long name, its key and tempo, "pick again to
+   remove"): the space-bar badge steps aside and the body takes its slot too (21.1–45.6). */
+.hub.peek .hub-body { margin-bottom: 4.4cqw; }
+.hub.peek .hub-kc { opacity: 0; }
 .hub.peek .hub-sub { white-space: normal; margin-top: 1.4cqw; }
 .hub.peek .hub-sub b { color: var(--hc); }
 /* small wheels (phones): the hub has room for "Playing" but not the hint after it */
