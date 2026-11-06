@@ -227,6 +227,30 @@ body.jamming .jam-btn { background: transparent; border-color: transparent; }
 .fx-btn.held .fx-name { background: #1d6bff; color: #fff; }
 .fx-row { display: flex; align-items: center; gap: calc(8 * var(--u)); padding-left: calc(4 * var(--u)); }
 .fx-kc { min-width: calc(22 * var(--u)); height: calc(22 * var(--u)); padding: 0 calc(5 * var(--u)); font-size: max(10.5px, calc(12 * var(--u))); flex: none; }
+/* The chosen effect's two settings (js/main.js renderFxTune): a row of beat lengths or a slider
+   each. In the card on desktops and tablets; on phones a panel the tune button opens (see the
+   layout modes below). */
+.fx-tune-btn { display: none; flex: none; place-items: center; width: calc(36 * var(--u)); height: calc(36 * var(--u)); border-radius: calc(10 * var(--u)); color: var(--muted); }
+.fx-tune-btn svg { width: calc(20 * var(--u)); height: calc(20 * var(--u)); }
+.fx-tune { display: none; gap: calc(14 * var(--u)); }
+.tune { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: calc(5 * var(--u)); }
+.tune:has(.tune-steps) { flex: none; } /* the lengths keep their width; the slider takes the rest */
+.tune-label { font: 600 max(10.5px, calc(12 * var(--u)))/1 var(--ui); color: var(--muted); }
+.tune-steps { display: flex; gap: 2px; padding: 2px; border-radius: calc(9 * var(--u)); background: rgba(255, 255, 255, 0.06); }
+.tune-steps button {
+  flex: 1 0 auto; padding: calc(5 * var(--u)) calc(6 * var(--u)); border-radius: calc(7 * var(--u));
+  font: 600 max(10.5px, calc(12 * var(--u)))/1 var(--ui); color: var(--muted); white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
+}
+.tune-steps button:hover { color: var(--text); }
+.tune-steps button[aria-checked="true"] { background: rgba(255, 255, 255, 0.16); color: var(--text); }
+.tune input[type="range"] { width: 100%; }
+/* Desktops and tablets: the settings take the description's place in the card (the description
+   stays as each effect's tooltip, and for screen readers). */
+@media (min-width: 700px) and (min-height: 541px) {
+  .fx-tune { display: flex; padding: 0 calc(4 * var(--u)); }
+  .fx-hint { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
 .fx-picker {
   flex: 1; min-width: 0; display: flex; gap: calc(4 * var(--u)); padding: calc(4 * var(--u));
   border-radius: calc(14 * var(--u)); background: var(--panel); border: 1px solid var(--panel-line); backdrop-filter: blur(6px);
@@ -572,8 +596,8 @@ body.jamming .jam-btn { background: transparent; border-color: transparent; }
   .album-name, .jam-btn, .ctl-label, .ctl-sub, .fx-hint { display: none; }
 
   .left {
-    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
-    grid-template-areas: "layers layers layers" "tempo key fx" "chips chips chips";
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto;
+    grid-template-areas: "layers layers layers layers" "tempo key tune fx" "chips chips chips chips";
     align-items: center; gap: calc(10 * var(--u)) calc(8 * var(--u));
     width: min(100%, calc(540 * var(--u)));
   }
@@ -693,7 +717,7 @@ body.jamming .jam-btn { background: transparent; border-color: transparent; }
   /* the effects (icons only) and the round FX hold button share one row */
   .fx { flex-direction: row; align-items: center; gap: calc(8 * var(--u)); }
   .fx-row { flex: 1; min-width: 0; padding-left: 0; }
-  .fx-btn { order: 1; padding: 0; }
+  .fx-btn, .fx-tune-btn { order: 1; padding: 0; } /* after the effects: the tune button, then FX */
   .fx-btn .kc-lg { width: calc(38 * var(--u)); height: calc(38 * var(--u)); }
   .fx-text, .fx-name, .fx-chip span { display: none; }
   .fx-chip { padding: calc(6 * var(--u)) 2px; }
@@ -737,6 +761,33 @@ body.jamming .jam-btn { background: transparent; border-color: transparent; }
   .album-nav { width: calc(48 * var(--u)); height: calc(34 * var(--u)); flex: none; }
   .album { width: calc(48 * var(--u)); height: calc(48 * var(--u)); }
   .album[aria-selected="true"] { width: calc(58 * var(--u)); height: calc(58 * var(--u)); }
+}
+
+/* Phones: the tune button sits just left of the FX button and opens the settings as a panel over
+   the page, above the controls when the phone is upright and under the effects on its side. */
+@media (max-width: 699px) and (orientation: portrait), (max-width: 699px) and (min-height: 541px), (orientation: landscape) and (max-height: 540px) {
+  .fx-tune-btn { display: grid; }
+  .fx-tune {
+    position: absolute; left: 0; right: 0; z-index: 5;
+    padding: calc(12 * var(--u)) calc(14 * var(--u)) calc(14 * var(--u)); border-radius: calc(16 * var(--u));
+    background: var(--panel); box-shadow: 0 calc(12 * var(--u)) calc(32 * var(--u)) rgba(0, 0, 0, 0.6);
+  }
+  .tuning .fx-tune { display: flex; }
+}
+@media (max-width: 699px) and (orientation: portrait), (max-width: 699px) and (min-height: 541px) {
+  .left { position: relative; }
+  .fx-tune-btn { grid-area: tune; align-self: center; width: calc(38 * var(--u)); height: calc(38 * var(--u)); border-radius: 50%; }
+  /* The FX cap matches the tune button beside it and sits on the same centre line: no "(Hold)"
+     under it here (the button is named "Audio FX (hold)", and the help explains holding). */
+  .fx-btn { align-self: center; padding: 0; }
+  .fx-btn .kc-lg { width: calc(38 * var(--u)); height: calc(38 * var(--u)); }
+  .fx-btn .kc-lg::before { content: 'FX'; } /* says what it is, with a mouse too (F is in the help) */
+  .fx-text { display: none; }
+  .fx-tune { bottom: calc(100% + 8 * var(--u)); }
+}
+@media (orientation: landscape) and (max-height: 540px) {
+  .fx { position: relative; }
+  .fx-tune { top: calc(100% + 6 * var(--u)); }
 }
 
 @media (hover: none) {

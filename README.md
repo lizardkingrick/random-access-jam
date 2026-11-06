@@ -12,7 +12,7 @@ Pick a groove, a lead and an extra from different songs. Every pick lands in tem
 ![No install](https://img.shields.io/badge/no%20account%2C%20no%20install-b964ff?style=flat-square)
 ![Works on phones](https://img.shields.io/badge/desktop%20%C2%B7%20phone%20%C2%B7%20tablet-2f8cff?style=flat-square)
 
-<a href="https://dreamchamberremixed.xyz"><img src="docs/media/hero.webp" alt="Dream Chamber Remixed on desktop and phone: three layers playing over the pyramid stage, with the radial song wheel and the picked song in the Groove layer's green" width="100%"></a>
+<a href="https://dreamchamberremixed.xyz"><img src="docs/media/hero.webp" alt="Dream Chamber Remixed on desktop and phone: three layers playing over the pyramid stage, with the radial song wheel, the picked song in the Groove layer's green, and Stutter's length and gate settings in the Audio FX card" width="100%"></a>
 
 </div>
 
@@ -38,7 +38,10 @@ key, so any combination you pick stays in sync. Everything runs in the browser.
 - 💿 **24 songs, 57 stems** from Homework, Discovery, Human After All, Alive 2007, Random Access
   Memories and the Weeknd collaborations.
 - ✨ **Six hold-to-play effects:** Stutter, Low-pass and High-pass sweeps, Phaser, Wah and Tape
-  stop. Let go and the mix snaps back in time.
+  stop, each with two settings you can change mid-hold (like Stutter's note length or the
+  filters' depth). Let go and the mix snaps back in time.
+- 🎛️ **FX transitions.** Pick new songs while holding an effect and they wait, then all drop in
+  the moment you let go: filter the old groove down, choose the next one, release.
 - 🔺 **Live stage.** A neon pyramid concert behind the interface, with the duo bopping in time.
   Every layer you add brings in more of the light show, and the groove's album picks the colours.
 - 🔗 **Share, record, export.** A share link stores the whole mix in its URL. You can record the

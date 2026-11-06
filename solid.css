@@ -113,6 +113,18 @@ body.jamming .jam-btn { background: transparent; box-shadow: none; }
 .fx-picker.held .fx-chip[aria-checked="true"] { animation: fxbeat calc(60s / var(--bpm, 120)) ease-out infinite; }
 @keyframes fxbeat { 0% { color: #fff; } }
 
+/* The effect's settings: the chosen length in the layer's colour, the sliders filled with it
+   (see the sliders below). On phones they open as a raised panel. */
+.tune-label { font-family: var(--sans); font-weight: 500; color: var(--soft); }
+.tune-steps { background: var(--raised); box-shadow: var(--hairline); }
+.tune-steps button { font-family: var(--sans); font-weight: 500; color: var(--soft); }
+.tune-steps button[aria-checked="true"] { background: color-mix(in srgb, var(--accent) 18%, var(--control)); color: var(--accent); }
+.fx-tune-btn { background: var(--control); color: var(--soft); box-shadow: var(--hairline); }
+.fx-tune-btn:hover, .fx-tune-btn[aria-expanded="true"] { color: var(--accent); }
+.fx-tune-btn[aria-expanded="true"] { background: color-mix(in srgb, var(--accent) 18%, var(--control)); }
+.fx-tune { background: var(--raised); box-shadow: var(--hairline), var(--lift); }
+@media (min-width: 700px) and (min-height: 541px) { .fx-tune { background: none; box-shadow: none; } }
+
 .album { border-radius: calc(8 * var(--u)); border-color: transparent; }
 .album[aria-selected="true"] { border-color: var(--accent); box-shadow: none; }
 

@@ -715,7 +715,7 @@ function startSource(layerId, when, offset, buffer) {
   src.connect(trim); trim.connect(sg);
   sg.connect(s.fxIn);
   // Joins a Tape stop brake already under way.
-  if (fxOn && fxOn.id === 'tapestop' && fxOn.t !== undefined) slowToHalt(src.playbackRate, fxOn.t, fxOn.len);
+  if (fxOn && fxOn.id === 'tapestop' && fxOn.t !== undefined) slowToHalt(src.playbackRate, fxOn.t, fxOn.len, fxOn.floor);
   const f = Math.round((offset - (when - at)) * sr); // the loop position at `at`, in whole frames
   src.start(at, (((f % len) + len) % len) / sr);
   // Once it's gone, the cache counts its buffer again (a replaced pick's render, say).
@@ -774,23 +774,29 @@ function bufferAt(s, t) {
 // has something to start.
 // A member that never reports back (an unexpected error) must not hold the others forever:
 // after 30 s the ready ones go ahead.
+// While an Audio FX is held, picks wait for it: every group made during the hold has an extra
+// member, 'fx', settled when it's let go (see dropHeld), so the new songs drop in as it releases.
 const openGroups = new Set();
 let tempoHeld = false; // a tempo restart waits for a group to land (see resyncOnce)
+let heldGroup = null; // the group single picks join during a hold
 function swapGroup(members) {
-  const g = { waiting: new Set(members), starts: [] };
+  const g = { waiting: new Set(members), starts: [], ready: new Set() };
+  if (fxOn && state.playing) g.waiting.add('fx');
   g.timer = setTimeout(() => { for (const m of [...g.waiting]) settle(g, m); }, 30000);
   openGroups.add(g);
   return g;
 }
 function settle(g, member, start) {
   if (!g || !g.waiting.has(member)) return false;
-  if (start) g.starts.push(start);
+  if (start) { g.starts.push(start); g.ready.add(member); }
   g.waiting.delete(member);
   if (g.waiting.size) return true;
   clearTimeout(g.timer);
   openGroups.delete(g);
+  if (g === heldGroup) heldGroup = null;
   if (g.starts.length && state.playing) {
-    const t = nextBarTime();
+    // A held group drops in as the FX is let go, if it's ready by then; otherwise on a bar line.
+    const t = g.dropAt > ctx.currentTime + XFADE ? g.dropAt : nextBarTime();
     for (const fn of g.starts) fn(t);
     changed();
   }
@@ -799,7 +805,16 @@ function settle(g, member, start) {
 }
 // While playing, a tempo restart would start a group's ready picks at once and cut the old
 // picks of the ones still loading: it waits until the whole group is in.
-const groupLoading = () => [...openGroups].some((g) => [...g.waiting].some((m) => m !== 'resync' && state.layers[m].loading));
+const groupLoading = () => [...openGroups].some((g) => [...g.waiting].some((m) => state.layers[m] && state.layers[m].loading));
+// The groups waiting for the held FX, and the layers in them that are ready to drop.
+const heldGroups = () => [...openGroups].filter((g) => g.waiting.has('fx'));
+export const queued = (layerId) => heldGroups().some((g) => g.waiting.has(layerId) || g.ready.has(layerId));
+// Letting go of the FX: everything picked during the hold drops in at `at` (in time: each song
+// starts at the loop position the clock is at). A pick still loading follows on a bar line.
+function dropHeld(at) {
+  for (const g of heldGroups()) { g.dropAt = at; settle(g, 'fx'); }
+  changed();
+}
 
 // Moves the clock to the current tempo at time t, keeping the position in the 32-bar cycle.
 function retime(t) {
@@ -1007,7 +1022,13 @@ async function resyncOnce() {
 export async function selectStem(layerId, song, opts = {}) {
   ensureCtx();
   const s = state.layers[layerId];
-  if (s.song === song && !opts.force) return clearLayer(layerId);
+  if (s.song === song && !opts.force) {
+    // During an FX hold, picking a queued song again takes it back: the layer keeps what it had.
+    if (fxOn && state.playing && queued(layerId) && s.heldFrom !== song) {
+      return s.heldFrom ? selectStem(layerId, s.heldFrom, { force: true }) : clearLayer(layerId);
+    }
+    return clearLayer(layerId);
+  }
   const type = stemTypeFor(layerId, song);
   if (!type) { settle(opts.group, layerId); return; }
 
@@ -1015,6 +1036,17 @@ export async function selectStem(layerId, song, opts = {}) {
   if (firstStem && !state.tempoTouched && !opts.keepTempo && !state.playing) state.bpm = Math.round(MANIFEST[song].bpm);
   const rootBefore = masterRoot();
   const gen = playGen;
+  // During an FX hold a pick waits for the release (see dropHeld); the layer remembers what it
+  // had, so the pick can be taken back.
+  let group = opts.group || null;
+  if (fxOn && state.playing) {
+    if (s.heldFrom === undefined) s.heldFrom = s.song; // the first change in this hold
+    if (!group) {
+      if (!heldGroup) heldGroup = swapGroup([]);
+      group = heldGroup;
+      group.waiting.add(layerId);
+    }
+  }
   s.song = song;
   s.type = type;
   s.loading = true;
@@ -1027,7 +1059,6 @@ export async function selectStem(layerId, song, opts = {}) {
   queueMicrotask(abortUnwanted);
   // Picks made together (Random) drop in together; so does a new song on the auto-key anchor
   // and the other layers it re-keys.
-  let group = opts.group || null;
   // A new song on the auto-key anchor moves the master key: re-key the other layers (after
   // this task, so a random pick of every layer re-keys once, against the final songs).
   if (rootBefore !== null && masterRoot() !== rootBefore) {
@@ -1178,6 +1209,25 @@ export const FX = [
   { id: 'wah', label: 'Wah', desc: 'A resonant band sweeping up and down on the beat' },
   { id: 'tapestop', label: 'Tape stop', desc: 'Slows to a halt like a vinyl brake' },
 ];
+// Each effect's two settings: 'steps' are musical lengths and rates (so the effect stays on the
+// beat), 'range' is a slider from min to max. The defaults are the effects as they always were.
+const steps = (id, label, value, options) => ({ id, label, kind: 'steps', value, options: options.map(([l, v]) => ({ label: l, value: v })) });
+const range = (id, label, value, min, max) => ({ id, label, kind: 'range', value, min, max, step: (max - min) / 100 });
+export const FX_PARAMS = {
+  // len: repeats per bar (8 = an eighth note); gate: how much of each repeat sounds
+  stutter: [steps('len', 'Length', 8, [['1/4', 4], ['1/8', 8], ['1/16', 16], ['1/32', 32]]), range('gate', 'Gate', 0.62, 0.25, 0.95)],
+  // depth: how far the sweep goes (1 = down to 260 Hz / up to 2.4 kHz); res: the filter's Q
+  lowpass: [range('depth', 'Depth', 1, 0, 1), range('res', 'Resonance', 5, 0.7, 12)],
+  highpass: [range('depth', 'Depth', 1, 0, 1), range('res', 'Resonance', 4, 0.7, 12)],
+  // speed: sweeps per bar; mix: how much of the phased sound against the dry mix
+  phaser: [steps('speed', 'Speed', 0.5, [['4 bars', 0.25], ['2 bars', 0.5], ['1 bar', 1], ['½ bar', 2]]), range('mix', 'Depth', 1, 0.2, 1)],
+  // speed: sweeps per bar (4 = once a beat); depth: cents either side of the centre
+  wah: [steps('speed', 'Speed', 4, [['1 bar', 1], ['½ bar', 2], ['Beat', 4], ['½ beat', 8]]), range('depth', 'Depth', 1500, 400, 2400)],
+  // len: the brake's length in bars; amount: how far it slows (1 = to a halt)
+  tapestop: [steps('len', 'Length', 0.5, [['1 beat', 0.25], ['2 beats', 0.5], ['1 bar', 1]]), range('amount', 'Amount', 1, 0.3, 1)],
+};
+const fxSet = Object.fromEntries(Object.entries(FX_PARAMS).map(([id, ps]) => [id, Object.fromEntries(ps.map((p) => [p.id, p.value]))]));
+export const fxParam = (id, key) => fxSet[id][key];
 let fxOn = null; // { id, ...state the release needs }
 
 // Freeze a parameter where it is right now so a new ramp starts from there. Only for one with
@@ -1190,12 +1240,12 @@ function hold(param, t) {
 }
 const playingLayers = () => activeLayers().filter((id) => state.layers[id].source && state.layers[id].buffer);
 
-// Tape stop's brake: full speed at t, a halt `len` later (two beats). A source started during
-// the hold gets the same curve, so it joins at the speed the others have reached.
-function slowToHalt(rate, t, len) {
+// Tape stop's brake: full speed at t, down to `floor` (a halt by default) `len` later. A source
+// started during the hold gets the same curve, so it joins at the speed the others have reached.
+function slowToHalt(rate, t, len, floor = 0.0001) {
   rate.cancelScheduledValues(t);
   rate.setValueAtTime(1, t);
-  rate.linearRampToValueAtTime(0.0001, t + len);
+  rate.linearRampToValueAtTime(floor, t + len);
 }
 
 // Wah: a resonant band-pass swept once per beat, brightest on the beat. It sweeps in cents
@@ -1244,8 +1294,60 @@ function stopSweep(id, t) {
 function retuneSweeps(t) {
   for (const s of Object.values(sweeps)) s.osc.frequency.setValueAtTime(s.perBar / barSec(), t);
 }
-// One cycle per beat, starting where the beat is at t.
-const startWah = (t) => startSweep('wah', [wah.detune], WAH.depth, 4, cyclePos(4, t), t);
+// `speed` cycles per bar (once a beat by default), starting where that cycle is at t, so it
+// stays locked to the beat when it restarts with new settings.
+const startWah = (t) => {
+  const { speed, depth } = fxSet.wah;
+  startSweep('wah', [wah.detune], depth, speed, cyclePos(speed, t), t);
+};
+// Where Low-pass and High-pass sweep to, in cents from rest: Depth 1 is the full sweep, 0 a
+// gentle one (about 3.7 kHz and 200 Hz).
+const lpCents = () => cents(22000, 260) * (0.4 + 0.6 * fxSet.lowpass.depth);
+const hpCents = () => cents(10, 2400) * (0.55 + 0.45 * fxSet.highpass.depth);
+// Phaser's Depth sets the wet/dry balance; at 1 it's the measured, level-matched mix.
+const phaserMix = () => {
+  const m = fxSet.phaser.mix;
+  return { wet: PHASER.wet * m, dry: 1 - (1 - PHASER.dry) * m };
+};
+
+// Stutter's beat repeat: from the next grid line (a 1/16, or the repeat if shorter), loop the
+// repeat-length slice that just played, gated so each repeat is chopped. The real sources keep
+// running underneath, muted at the layer's FX insert (see fxStart). Returns the repeats.
+// On whole samples like the rest of the transport (see frame): a repeat read from between
+// samples would sound duller than the music it stands in for.
+function startRepeats() {
+  const { len: perBar, gate: open } = fxSet.stutter;
+  const bar = barSec(), sr = ctx.sampleRate;
+  const sliceF = Math.round(bar / perBar * sr), slice = sliceF / sr, grid = Math.min(bar / 16, slice);
+  const t0 = frame(state.transportStart + Math.ceil((ctx.currentTime + 0.03 - state.transportStart) / grid) * grid);
+  const shut = Math.min(slice * open, slice - 0.008); // a short repeat still closes before the next
+  const repeats = [];
+  for (const lid of activeLayers()) {
+    const s = state.layers[lid];
+    const buffer = bufferAt(s, t0); // what is heard then: the outgoing stem if a swap is pending
+    if (!buffer) continue;
+    const len = buffer.length, f = Math.round((t0 - state.transportStart) * sr);
+    const atF = ((f % len) + len) % len;
+    const from = Math.min(Math.max(0, atF - sliceF), len - sliceF) / sr;
+    const gate = ctx.createGain();
+    gate.gain.setValueAtTime(0, ctx.currentTime);
+    for (let k = 0; k < 12 * perBar; k++) { // up to 12 bars of repeats; released long before that
+      const a = t0 + k * slice;
+      gate.gain.setValueAtTime(0, a);
+      gate.gain.linearRampToValueAtTime(1, a + 0.004);
+      gate.gain.setValueAtTime(1, a + shut);
+      gate.gain.linearRampToValueAtTime(0, a + shut + 0.006);
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buffer; src.loop = true; src.loopStart = from; src.loopEnd = from + slice;
+    const trim = trimNode(ctx, buffer); // at the level the stem was playing
+    src.connect(trim); trim.connect(gate);
+    gate.connect(s.gain); // past the FX insert, which mutes the real sources
+    src.start(t0, from);
+    repeats.push({ lid, src, gate, trim });
+  }
+  return { repeats, t0 };
+}
 
 function stopRepeats(repeats, t) {
   for (const { src, gate, trim } of repeats) {
@@ -1266,73 +1368,76 @@ function openInserts(t) {
 export function fxStart(id) {
   if (!ctx || fxOn) return;
   const t = ctx.currentTime + 0.005;
-  fxOn = { id };
-  if (id === 'lowpass') { // sweeps down while held (to 260 Hz), so a longer hold goes deeper
-    rampTracked(lp.detune, t, t + 1.6, cents(22000, 260));
-    rampTracked(lp.Q, t, t + 0.4, 5);
-  } else if (id === 'highpass') { // up to 2.4 kHz
-    rampTracked(hp.detune, t, t + 1.6, cents(10, 2400));
-    rampTracked(hp.Q, t, t + 0.4, 4);
+  fxOn = { id, t };
+  if (id === 'lowpass') { // sweeps down while held (to 260 Hz at full Depth), so a longer hold goes deeper
+    rampTracked(lp.detune, t, t + 1.6, lpCents());
+    rampTracked(lp.Q, t, t + 0.4, fxSet.lowpass.res);
+  } else if (id === 'highpass') { // up to 2.4 kHz at full Depth
+    rampTracked(hp.detune, t, t + 1.6, hpCents());
+    rampTracked(hp.Q, t, t + 0.4, fxSet.highpass.res);
   } else if (id === 'phaser') {
     // The stages rest at the bottom of the sweep; the LFO starts at its trough, so it lifts them
     // from exactly there (cos, offset by half the range): every press is the same rising swoosh.
-    const half = PHASER.range / 2;
+    const half = PHASER.range / 2, { wet, dry } = phaserMix();
     for (const f of phaser) { f.detune.cancelScheduledValues(t); f.detune.setValueAtTime(half, t); }
-    startSweep('phaser', phaser.map((f) => f.detune), -half, PHASER.perBar, 0, t);
-    rampTracked(phWet.gain, t, t + 0.08, PHASER.wet);
-    rampTracked(fxDry.gain, t, t + 0.08, PHASER.dry);
+    startSweep('phaser', phaser.map((f) => f.detune), -half, fxSet.phaser.speed, 0, t);
+    rampTracked(phWet.gain, t, t + 0.08, wet);
+    rampTracked(fxDry.gain, t, t + 0.08, dry);
   } else if (id === 'wah') {
     startWah(t);
     rampTracked(wahWet.gain, t, t + 0.05, WAH.wet);
     rampTracked(fxDry.gain, t, t + 0.05, WAH.dry);
   } else if (id === 'stutter' && state.playing) {
-    // Beat repeat: from the next 1/16 line, loop the eighth note that just played, gated so
-    // each repeat is chopped. The real sources keep running underneath, muted at the layer's
-    // FX insert (so a swap landing during the hold stays muted too), and letting go lands back
-    // exactly in time.
-    // On whole samples like the rest of the transport (see frame): a repeat read from between
-    // samples would sound duller than the music it stands in for.
-    const bar = barSec(), sr = ctx.sampleRate, grid = bar / 16;
-    const sliceF = Math.round(bar / 8 * sr), slice = sliceF / sr;
-    const t0 = frame(state.transportStart + Math.ceil((ctx.currentTime + 0.03 - state.transportStart) / grid) * grid);
-    fxOn.repeats = [];
-    for (const lid of activeLayers()) {
-      const s = state.layers[lid];
-      const buffer = bufferAt(s, t0); // what is heard then: the outgoing stem if a swap is pending
-      if (!buffer) continue;
-      const len = buffer.length, f = Math.round((t0 - state.transportStart) * sr);
-      const atF = ((f % len) + len) % len;
-      const from = Math.min(Math.max(0, atF - sliceF), len - sliceF) / sr;
-      const gate = ctx.createGain();
-      gate.gain.setValueAtTime(0, ctx.currentTime);
-      for (let k = 0; k < 96; k++) { // up to 12 bars of repeats; released long before that
-        const a = t0 + k * slice;
-        gate.gain.setValueAtTime(0, a);
-        gate.gain.linearRampToValueAtTime(1, a + 0.004);
-        gate.gain.setValueAtTime(1, a + slice * 0.62);
-        gate.gain.linearRampToValueAtTime(0, a + slice * 0.62 + 0.006);
-      }
-      const src = ctx.createBufferSource();
-      src.buffer = buffer; src.loop = true; src.loopStart = from; src.loopEnd = from + slice;
-      const trim = trimNode(ctx, buffer); // at the level the stem was playing
-      src.connect(trim); trim.connect(gate);
-      gate.connect(s.gain); // past the FX insert, which mutes the real sources
-      src.start(t0, from);
-      fxOn.repeats.push({ lid, src, gate, trim });
-    }
+    // The repeats stand in for the real sources, which are muted at the layer's FX insert (so a
+    // swap landing during the hold stays muted too); letting go lands back exactly in time.
+    const { repeats, t0 } = startRepeats();
+    fxOn.repeats = repeats;
     // Every layer, so one leaving or joining during the hold stays quiet too.
     for (const l of LAYERS) rampTracked(state.layers[l.id].fxIn.gain, t0 - 0.004, t0, 0);
   } else if (id === 'tapestop' && state.playing) {
-    // Slow every source to a halt (outgoing and pending ones too); letting go restarts them in
-    // sync with the clock.
-    fxOn.t = t;
-    fxOn.len = barSec() / 2; // two beats, so it lands like a played break at any tempo
+    // Slow every source down (outgoing and pending ones too); letting go restarts them in sync
+    // with the clock. At full Amount it's a halt, and the layers fade out at the end of it.
+    const { len, amount } = fxSet.tapestop;
+    fxOn.len = barSec() * len; // in beats or bars, so it lands like a played break at any tempo
+    fxOn.floor = Math.max(0.0001, 1 - amount);
     fxOn.layers = playingLayers();
     for (const l of LAYERS) {
       const s = state.layers[l.id];
-      for (const src of sourcesOf(s)) slowToHalt(src.playbackRate, t, fxOn.len);
-      rampTracked(s.fxIn.gain, t + 0.7 * fxOn.len, t + fxOn.len, 0);
+      for (const src of sourcesOf(s)) slowToHalt(src.playbackRate, t, fxOn.len, fxOn.floor);
+      if (amount >= 0.95) rampTracked(s.fxIn.gain, t + 0.7 * fxOn.len, t + fxOn.len, 0);
     }
+  }
+}
+
+// Changes one of an effect's settings (see FX_PARAMS). Held, the effect follows at once: the
+// filters glide to their new depth or resonance, Phaser and Wah change speed or depth on the beat,
+// and Stutter starts repeating the new length from the next grid line. Tape stop's brake is
+// already under way, so its settings take effect at the next press.
+export function setFxParam(id, key, value) {
+  const p = FX_PARAMS[id] && FX_PARAMS[id].find((q) => q.id === key);
+  if (!p || !(p.kind === 'steps' ? p.options.some((o) => o.value === value) : value >= p.min && value <= p.max)) return;
+  fxSet[id][key] = value;
+  if (!ctx || !fxOn || fxOn.id !== id) return;
+  const t = ctx.currentTime + 0.005;
+  if (id === 'lowpass' || id === 'highpass') {
+    const f = id === 'lowpass' ? lp : hp;
+    // the depth keeps to the press's sweep if that's still going, so a hold still goes deeper
+    if (key === 'depth') rampTracked(f.detune, t, Math.max(t + 0.15, fxOn.t + 1.6), id === 'lowpass' ? lpCents() : hpCents());
+    else rampTracked(f.Q, t, t + 0.08, value);
+  } else if (id === 'phaser') {
+    if (key === 'speed' && sweeps.phaser) {
+      sweeps.phaser.perBar = value;
+      sweeps.phaser.osc.frequency.setValueAtTime(value / barSec(), t);
+    } else if (key === 'mix') {
+      const { wet, dry } = phaserMix();
+      rampTracked(phWet.gain, t, t + 0.08, wet);
+      rampTracked(fxDry.gain, t, t + 0.08, dry);
+    }
+  } else if (id === 'wah') {
+    startWah(t);
+  } else if (id === 'stutter' && fxOn.repeats) {
+    stopRepeats(fxOn.repeats, t);
+    fxOn.repeats = startRepeats().repeats;
   }
 }
 
@@ -1340,6 +1445,10 @@ export function fxStart(id) {
 export function fxStop({ cancel = false } = {}) {
   if (!ctx || !fxOn) return;
   const { id } = fxOn, t = ctx.currentTime + 0.005;
+  // Songs picked during the hold drop in as it lets go (see dropHeld): the layers of a group
+  // that's ready, waiting only for the release.
+  const dropping = new Set(heldGroups().filter((g) => g.waiting.size === 1).flatMap((g) => [...g.ready]));
+  let dropAt = frame(ctx.currentTime + LEAD);
   if (id === 'lowpass') {
     rampTracked(lp.detune, t, t + 0.12, 0);
     rampTracked(lp.Q, t, t + 0.12, 0.7);
@@ -1371,11 +1480,15 @@ export function fxStop({ cancel = false } = {}) {
     fxOn = null; // the restarts below play at normal speed
     openInserts(at + 0.01);
     if (!cancel && state.playing) {
+      // The new picks come in with the restarts instead of their layers' old songs.
       const when = at + 0.04;
-      for (const [lid, buffer] of back) startSource(lid, when, when - state.transportStart, buffer);
+      for (const [lid, buffer] of back) if (!dropping.has(lid)) startSource(lid, when, when - state.transportStart, buffer);
+      dropAt = frame(when);
     }
   }
   fxOn = null;
+  for (const l of LAYERS) state.layers[l.id].heldFrom = undefined;
+  dropHeld(dropAt);
 }
 
 // ---------- meters (for the visuals) ----------

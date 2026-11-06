@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- FX transitions: songs picked while an Audio FX is held (Random too) wait, with the old songs
+  playing on under the effect, and all drop in the moment it's let go, in time. A waiting pick
+  pulses on the wheel and its card says "Drops when you let go of FX"; picking it again takes it
+  back. A pick still downloading at the release lands on the next bar once it's ready
+- Every effect has two settings, set for the chosen effect under the effects (on phones, the
+  tune button at the end of the effects row opens them): Stutter's length (1/4 to 1/32) and gate,
+  Low-pass and High-pass depth and resonance, Phaser's speed (4 bars to half a bar) and depth,
+  Wah's speed (a bar to half a beat) and depth, and Tape stop's length (a beat to a bar) and how
+  far it slows. Lengths and speeds are in beats and bars, so the effects stay on the beat.
+  Changing one while holding FX is heard at once (Tape stop's at the next press). Each effect
+  keeps its settings on the device; the defaults are the effects as they were
+- Phones held upright: the effect settings button sits just left of the FX button, which is the
+  same size, lined up with it, and says "FX" with a mouse too (no "(Hold)" under it); tempo and
+  key share the rest of the row
+
 ## 1.2.0-beta (2026-11-06)
 
 - A new look (`solid.css`, loaded after `style.css`): solid neutral-grey panels, cards and

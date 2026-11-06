@@ -93,7 +93,9 @@ function renderHub() {
     const info = E.MANIFEST[peek];
     const meta = `${prettyKey(info.key)} · ${info.bpm} BPM`;
     let html;
-    if (s.song === peek) {
+    if (s.song === peek && isQueued(ui.layer)) {
+      html = `${meta}<br><b>${s.loading ? 'Loading…' : 'Drops when you let go'}</b><span class="hub-hint"> · pick again to take back</span>`;
+    } else if (s.song === peek) {
       const now = s.loading ? 'Loading…' : state.playing ? 'Playing' : 'Selected';
       html = `${meta}<br><b>${now}</b><span class="hub-hint"> · pick again to remove</span>`;
     } else {
@@ -209,6 +211,9 @@ const fitSongNames = () => document.querySelectorAll('.layer-song').forEach(fitS
 addEventListener('resize', fitSongNames);
 document.fonts?.ready.then(fitSongNames);
 
+// Picked during an FX hold and waiting to drop in when it's let go (not one taken back).
+const isQueued = (id) => E.queued(id) && state.layers[id].song !== state.layers[id].heldFrom;
+
 function renderLayers() {
   for (const li of $('#layers').children) {
     const id = li.dataset.layer, s = state.layers[id], def = layerDef(id);
@@ -232,6 +237,7 @@ function renderLayers() {
     setSongName(song, displayName(s.song) + (part ? ` (${part})` : ''));
     sub.textContent = s.loading && s.progress < 1 ? `Loading… ${Math.round((s.progress || 0) * 100)}%`
       : s.loading || s.syncing ? 'Syncing to tempo…'
+      : isQueued(id) ? 'Drops when you let go of FX'
       : `${albumById(info.album).name} · ${prettyKey(info.key)}${shiftLabel(s.song)}`;
     const badge = $('.layer-badge', li);
     if (badge.dataset.album !== info.album) { badge.dataset.album = info.album; badge.innerHTML = albumArtUnique(info.album); }
@@ -328,7 +334,7 @@ function render() {
     layerLabel: layerDef(ui.layer).label,
     disabled: (song) => !E.stemTypeFor(ui.layer, song),
     active: (song) => cur.song === song,
-    loading: (song) => cur.song === song && cur.loading,
+    loading: (song) => cur.song === song && (cur.loading || isQueued(ui.layer)), // queued ones pulse too
     usedBy: (song) => LAYERS.map((l) => l.id).filter((id) => state.layers[id].song === song),
   });
   document.body.style.setProperty('--bpm', state.bpm);
@@ -404,6 +410,64 @@ function renderFxPicker() {
   $('#fxPicker').querySelectorAll('.fx-chip').forEach((b) => b.setAttribute('aria-checked', b.dataset.fx === fx.id));
   $('#fxName').textContent = fx.label;
   $('#fxHint').textContent = fx.desc;
+  renderFxTune();
+}
+
+// Each effect's two settings (E.FX_PARAMS), kept per effect on this device. A saved value the
+// engine doesn't accept (an option since removed) is skipped, so the default stands.
+const FX_SAVE = 'dcr-fx-settings';
+function savedFxSettings() {
+  try { return JSON.parse(localStorage.getItem(FX_SAVE)) || {}; } catch (_) { return {}; }
+}
+function loadFxSettings() {
+  for (const [id, vals] of Object.entries(savedFxSettings())) {
+    for (const [key, v] of Object.entries(vals || {})) E.setFxParam(id, key, v);
+  }
+}
+function setFxSetting(key, value, save) {
+  E.setFxParam(ui.fx.type, key, value); // held, the effect follows at once
+  if (!save) return;
+  const all = savedFxSettings();
+  (all[ui.fx.type] ||= {})[key] = E.fxParam(ui.fx.type, key);
+  try { localStorage.setItem(FX_SAVE, JSON.stringify(all)); } catch (_) { /* private mode */ }
+}
+function renderFxTune() {
+  const id = ui.fx.type;
+  $('#fxTune').innerHTML = E.FX_PARAMS[id].map((p) => {
+    const v = E.fxParam(id, p.id);
+    if (p.kind === 'steps') {
+      return `<div class="tune" role="radiogroup" aria-label="${p.label}"><span class="tune-label" aria-hidden="true">${p.label}</span>
+        <div class="tune-steps">${p.options.map((o) => `<button type="button" role="radio" data-key="${p.id}" data-value="${o.value}" aria-checked="${o.value === v}">${o.label}</button>`).join('')}</div></div>`;
+    }
+    return `<label class="tune"><span class="tune-label">${p.label}</span>
+      <input type="range" data-key="${p.id}" min="${p.min}" max="${p.max}" step="${p.step}" value="${v}"></label>`;
+  }).join('');
+  $('#fxTune').querySelectorAll('input[type="range"]').forEach(paintRange);
+}
+function bindFxTune() {
+  const tune = $('#fxTune'), btn = $('#fxTuneBtn'), fx = $('.fx');
+  tune.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-key]');
+    if (!b) return;
+    setFxSetting(b.dataset.key, Number(b.dataset.value), true);
+    b.parentElement.querySelectorAll('button').forEach((o) => o.setAttribute('aria-checked', o === b));
+  });
+  // live while dragging; saved when let go
+  tune.addEventListener('input', (e) => {
+    if (!e.target.matches('input[type="range"]')) return;
+    setFxSetting(e.target.dataset.key, Number(e.target.value), false);
+    paintRange(e.target);
+  });
+  tune.addEventListener('change', (e) => {
+    if (e.target.matches('input[type="range"]')) setFxSetting(e.target.dataset.key, Number(e.target.value), true);
+  });
+  // Phones: the tune button opens the settings as a panel; a press anywhere outside the Audio FX
+  // controls closes it (the FX button is inside them, so it can be held while tuning).
+  const open = (on) => { fx.classList.toggle('tuning', on); btn.setAttribute('aria-expanded', on); };
+  btn.addEventListener('click', () => open(!fx.classList.contains('tuning')));
+  addEventListener('pointerdown', (e) => {
+    if (fx.classList.contains('tuning') && !e.target.closest('#fxTune, #fxTuneBtn, #fxBtn, #fxPicker')) open(false);
+  });
 }
 function fxEngage() {
   if (ui.fx.held) return;
@@ -424,7 +488,9 @@ function fxRelease() {
   E.fxStop();
 }
 function bindFx() {
+  loadFxSettings();
   buildFxPicker();
+  bindFxTune();
   const btn = $('#fxBtn');
   btn.addEventListener('pointerdown', (e) => {
     btn.setPointerCapture(e.pointerId);

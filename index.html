@@ -106,7 +106,10 @@
     </div>
 
     <section class="fx" aria-label="Audio FX">
-      <button class="fx-btn" id="fxBtn" aria-describedby="fxHint">
+      <button class="fx-tune-btn" id="fxTuneBtn" type="button" aria-expanded="false" aria-controls="fxTune" aria-label="Effect settings" title="Effect settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+      </button>
+      <button class="fx-btn" id="fxBtn" aria-label="Audio FX (hold)" aria-describedby="fxHint">
         <kbd class="kc kc-lg" data-kb="F"></kbd>
         <span class="fx-text">Audio FX <em>(Hold)</em></span>
         <span class="fx-name" id="fxName">Low-pass</span>
@@ -116,6 +119,7 @@
         <div class="fx-picker" id="fxPicker" role="radiogroup" aria-label="Choose the effect"></div>
         <kbd class="kc fx-kc" data-kb="E" aria-hidden="true"></kbd>
       </div>
+      <div class="fx-tune" id="fxTune" role="group" aria-label="Effect settings"></div>
       <p class="fx-hint" id="fxHint"></p>
     </section>
 
@@ -157,7 +161,7 @@
       <li><b>Pick a layer</b>: <kbd>Space</kbd> switches between <i class="c-groove">Groove</i>, <i class="c-lead">Lead</i> and <i class="c-texture">Extra</i>.</li>
       <li><b>Pick a song</b>: hold the mouse button, drag through the songs and let go on the one you want (or just click it). It drops in on the next bar, synced to the tempo and key. Songs without a stem for the current layer show as empty slots.</li>
       <li><b>Mix songs</b>: fill each layer from a different track. <kbd>A</kbd> / <kbd>D</kbd> flip albums.</li>
-      <li><b>Pick an Audio FX</b> (stutter, low-pass, high-pass, phaser, wah or tape stop) under the Audio FX button, then <b>hold <kbd>F</kbd></b> to play it. Let go and it snaps back.</li>
+      <li><b>Pick an Audio FX</b> (stutter, low-pass, high-pass, phaser, wah or tape stop) under the Audio FX button, then <b>hold <kbd>F</kbd></b> to play it. Let go and it snaps back. Pick new songs while you hold it and they <b>drop in the moment you let go</b>: a quick transition.</li>
     </ol>
     <p class="jam-tip"><b>Enter Jam</b> (top left, or click empty space) hides the cursor so small mouse flicks steer the wheel. <kbd>Tab</kbd> exits.</p>
     <div class="keys">
