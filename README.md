@@ -71,6 +71,8 @@ On a phone or tablet, tap or drag on the wheel, and press and hold **FX** for ef
 > come from The Daft Punk Experience and remain © Daft Punk and their labels. They are **not**
 > included in this repository.
 
+**Humans after all (mostly).** AI tools helped build parts of this project.
+
 ## Run it yourself
 
 The code is here, but the audio is not.
