@@ -360,22 +360,31 @@ body.jamming .jam-btn { background: transparent; border-color: transparent; }
 .hub-ring .tick.now { stroke: var(--hc); filter: drop-shadow(0 0 calc(4 * var(--u)) var(--hc)); }
 /* Hub layout, in cqw of the wheel (the hub is 50cqw tall, the bar ring's inner edge sits
    ~1.6cqw in): layer buttons 5.5–19.5, body 21.1–40.6, key badge 41–45.6. Nothing grows
-   outside its slot, so the pieces can't overlap at any wheel size. The selected layer's
-   button fills the slot; the other two sit small and dim beside it. */
-.hub-cats { position: relative; display: flex; align-items: center; gap: 2cqw; height: 14cqw; margin-top: 5.5cqw; }
+   outside its slot, so the pieces can't overlap at any wheel size. The layer buttons are a
+   dial: they hang on an arc swung from a pivot above the hub, the selected layer at the
+   bottom of it (big, in the middle of the slot) and the previous / next layer small and dim
+   up either side. Changing layer swings --a, so the buttons turn round the arc. */
+@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+.hub-cats { position: relative; width: 100%; height: 14cqw; margin-top: 5.5cqw; }
 .hub-cat {
-  width: 6cqw; height: 6cqw; border-radius: 50%; flex: none;
+  --a: 0deg;
+  position: absolute; left: calc(50% + 17cqw * sin(var(--a))); top: calc(17cqw * cos(var(--a)) - 9.5cqw);
+  transform: translate(-50%, -50%);
+  width: 6cqw; height: 6cqw; border-radius: 50%;
   display: grid; place-items: center;
   color: var(--c); opacity: 0.45;
   background: rgba(255, 255, 255, 0.04);
-  transition: opacity 0.15s, background 0.15s, box-shadow 0.15s, width 0.2s, height 0.2s;
+  transition: opacity 0.15s, background 0.15s, box-shadow 0.15s, width 0.25s, height 0.25s, --a 0.25s ease-out;
 }
+.hub-cat[data-pos="-1"] { --a: -40deg; }
+.hub-cat[data-pos="1"] { --a: 40deg; }
+/* the one that wraps round (previous <-> next) crosses the middle hidden */
+.hub-cat.wrap { opacity: 0; transition-duration: 0s, 0.15s, 0.15s, 0.25s, 0.25s, 0.25s; }
 .hub-cat svg { width: 60%; height: 60%; }
 /* A bigger touch target than the icon: the small ones are only ~20px across on a phone. */
-.hub-cat { position: relative; }
 .hub-cat::after { content: ''; position: absolute; inset: -2.2cqw; border-radius: 50%; }
 .hub-cat:hover { opacity: 0.9; }
-.hub-cat[aria-selected="true"] { width: 13cqw; height: 13cqw; opacity: 1; background: color-mix(in srgb, var(--c) 24%, transparent); box-shadow: inset 0 0 0 0.6cqw var(--c), 0 0 4cqw color-mix(in srgb, var(--c) 50%, transparent); }
+.hub-cat[aria-selected="true"] { z-index: 1; width: 13cqw; height: 13cqw; opacity: 1; background: color-mix(in srgb, var(--c) 24%, transparent); box-shadow: inset 0 0 0 0.6cqw var(--c), 0 0 4cqw color-mix(in srgb, var(--c) 50%, transparent); }
 .hub-cat[aria-selected="true"] svg { width: 60%; height: 60%; filter: drop-shadow(0 0 calc(6 * var(--u)) color-mix(in srgb, var(--c) 70%, transparent)); }
 .hub-cat[data-layer="groove"] { --c: var(--groove); }
 .hub-cat[data-layer="lead"] { --c: var(--lead); }
@@ -742,4 +751,5 @@ body.jamming .jam-btn { background: transparent; border-color: transparent; }
   .layer-song.scroll { text-overflow: ellipsis; mask-image: none; }
   .seg { animation: none; }
   .layer.playing .layer-icon svg { animation: none; }
+  .hub-cat { transition-duration: 0s; }
 }

@@ -73,7 +73,19 @@ function renderHub() {
   const peek = ui.peek && E.stemTypeFor(ui.layer, ui.peek) ? ui.peek : null;
   hub.dataset.layer = ui.layer;
   hub.classList.toggle('peek', !!peek);
-  $('#hubCats').querySelectorAll('.hub-cat').forEach((b) => b.setAttribute('aria-selected', b.dataset.layer === ui.layer));
+  // Dial positions: 0 = the selected layer, 1 = the next one (Space), -1 = the previous one.
+  const sel = LAYERS.findIndex((l) => l.id === ui.layer);
+  $('#hubCats').querySelectorAll('.hub-cat').forEach((b, i) => {
+    const pos = String(((i - sel + 4) % 3) - 1);
+    b.setAttribute('aria-selected', pos === '0');
+    if (b.dataset.pos === pos) return;
+    if (b.dataset.pos && Math.abs(pos - b.dataset.pos) > 1) {
+      b.classList.add('wrap');
+      clearTimeout(b.wrapT);
+      b.wrapT = setTimeout(() => b.classList.remove('wrap'), 250);
+    }
+    b.dataset.pos = pos;
+  });
   const title = $('#hubTitle'), sub = $('#hubSub');
   if (peek) {
     const info = E.MANIFEST[peek];
