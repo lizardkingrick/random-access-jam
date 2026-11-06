@@ -355,9 +355,12 @@ body.jamming .jam-btn { background: transparent; border-color: transparent; }
 .hub[data-layer="lead"] { --hc: var(--lead); }
 .hub[data-layer="texture"] { --hc: var(--texture); }
 .hub-ring { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.hub-ring .tick { fill: none; stroke: rgba(120, 140, 255, 0.16); stroke-width: 5; transition: stroke 0.1s; }
-.hub-ring .tick.done { stroke: color-mix(in srgb, var(--hc) 55%, transparent); }
-.hub-ring .tick.now { stroke: var(--hc); filter: drop-shadow(0 0 calc(4 * var(--u)) var(--hc)); }
+.hub-ring .phrase, .hub-ring .phrase-fill { fill: none; stroke-width: 5; stroke-linecap: round; }
+.hub-ring .phrase { stroke: rgba(120, 140, 255, 0.16); }
+.hub-ring .phrase-fill { stroke: color-mix(in srgb, var(--hc) 45%, transparent); opacity: 0; }
+.hub-ring .phrase-fill.on { opacity: 1; }
+.hub-ring .phrase-fill.now { stroke: var(--hc); filter: drop-shadow(0 0 calc(4 * var(--u)) var(--hc)); }
+.hub-ring .beat-halo { fill: none; stroke: var(--hc); stroke-width: 9; stroke-opacity: 0; }
 /* Hub layout, in cqw of the wheel (the hub is 50cqw tall, the bar ring's inner edge sits
    ~1.6cqw in): layer buttons 5.5–19.5, body 21.1–40.6, key badge 41–45.6. Nothing grows
    outside its slot, so the pieces can't overlap at any wheel size. The layer buttons are a
@@ -752,4 +755,5 @@ body.jamming .jam-btn { background: transparent; border-color: transparent; }
   .seg { animation: none; }
   .layer.playing .layer-icon svg { animation: none; }
   .hub-cat { transition-duration: 0s; }
+  .hub-ring .beat-halo { display: none; }
 }

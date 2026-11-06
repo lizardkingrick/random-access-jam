@@ -52,15 +52,17 @@ function buildHub() {
     const b = e.target.closest('.hub-cat');
     if (b) setLayer(b.dataset.layer);
   });
-  // 32 bar ticks around the hub = position in the 32-bar loop
-  const ticks = [];
-  for (let i = 0; i < 32; i++) {
-    const a0 = (-90 + i * 11.25 + 1.4) * Math.PI / 180, a1 = (-90 + (i + 1) * 11.25 - 1.4) * Math.PI / 180;
-    const r = 143;
-    ticks.push(`<path class="tick" d="M${150 + r * Math.cos(a0)} ${150 + r * Math.sin(a0)} A${r} ${r} 0 0 1 ${150 + r * Math.cos(a1)} ${150 + r * Math.sin(a1)}"/>`);
-  }
-  $('#hubRing').innerHTML = ticks.join('');
+  // The ring round the hub = position in the 32-bar loop, as four 8-bar phrases, with a halo
+  // under them that flashes on each beat.
+  const r = 143, at = (deg) => { const a = (deg - 90) * Math.PI / 180; return `${150 + r * Math.cos(a)} ${150 + r * Math.sin(a)}`; };
+  const phrases = [0, 1, 2, 3].map((q) => `M${at(q * 90 + 3)} A${r} ${r} 0 0 1 ${at(q * 90 + 87)}`);
+  $('#hubRing').innerHTML = `<circle class="beat-halo" cx="150" cy="150" r="${r}"/>`
+    + phrases.map((d) => `<path class="phrase" d="${d}"/>`).join('')
+    + phrases.map((d) => `<path class="phrase-fill" d="${d}" pathLength="1"/>`).join('');
+  ringFills = [...$('#hubRing').querySelectorAll('.phrase-fill')];
+  ringHalo = $('#hubRing').querySelector('.beat-halo');
 }
+let ringFills = [], ringHalo = null;
 
 function shiftLabel(song) {
   const semis = E.semisFor(E.MANIFEST[song].key);
@@ -344,11 +346,21 @@ function tickClock(m) {
   if (bar !== lastBar) {
     lastBar = bar;
     $('#barReadout').textContent = bar < 0 ? 'BAR --' : `BAR ${String(bar + 1).padStart(2, '0')} / 32`;
-    $('#hubRing').querySelectorAll('.tick').forEach((t, i) => {
-      t.classList.toggle('done', i < bar);
-      t.classList.toggle('now', i === bar);
-    });
   }
+  // The phrase playing fills smoothly, every frame; the ones before it stay full.
+  const pos = bar < 0 ? -1 : m.bar;
+  ringFills.forEach((p, q) => {
+    const f = pos < 0 ? 0 : Math.min(1, Math.max(0, (pos - q * 8) / 8));
+    const dash = `${f.toFixed(4)} 2`;
+    if (p.dataset.dash === dash) return;
+    p.dataset.dash = dash;
+    p.style.strokeDasharray = dash;
+    p.classList.toggle('on', f > 0);
+    p.classList.toggle('now', f > 0 && f < 1);
+  });
+  // The beat halo peaks at 20% on the beat and fades out before the next one.
+  const halo = pos < 0 ? '0' : (0.2 * (1 - m.beat) ** 3).toFixed(3);
+  if (ringHalo.dataset.o !== halo) { ringHalo.dataset.o = halo; ringHalo.style.strokeOpacity = halo; }
 }
 
 // ---------- Audio FX: pick one in the strip, hold F (or the button) to play it ----------
