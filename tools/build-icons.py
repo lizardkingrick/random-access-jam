@@ -4,6 +4,9 @@
 # as a plain icon and as a maskable one (Android crops it to a circle or a squircle, iOS rounds the
 # corners).
 # Usage:  python tools/build-icons.py
+# After changing the icons, bump the ?v= on their URLs in manifest.webmanifest and index.html
+# (apple-touch-icon): the files keep their names and are cached for a day, and an installed app
+# on Android only swaps its icon when the manifest's icon URL changes.
 import math
 from pathlib import Path
 from PIL import Image, ImageDraw
