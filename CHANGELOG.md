@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Safari: changing a stem no longer leaves the old one playing in the background at its old tempo.
+  The engine kept each fade-out's plan on Web Audio objects it didn't hold, which Safari can throw
+  away; the next swap's fade-out then failed, the stop after it was skipped and the old stem looped
+  on, even after Stop. The plans now live in the engine's own records, a stem is always stopped
+  before its fade-out is scheduled, and a backstop cuts off anything still sounding after its stop
+  or out of time with the clock. A failed effect can no longer leave Audio FX stuck on hold, and
+  clearing layers while a tempo change was pending no longer leaves one playing (every browser).
+  FLAC stems are checked against their known length too
 - FX transitions: songs picked while an Audio FX is held (Random too) wait, with the old songs
   playing on under the effect, and all drop in the moment it's let go, in time. A waiting pick
   pulses on the wheel and its card says "Drops when you let go of FX"; picking it again takes it

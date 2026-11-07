@@ -38,6 +38,8 @@ export let MANIFEST = {};
 export let LOCAL = null; // the local server's folder listing, if there is one
 export let ctx = null;
 let master, bus, hp, lp, fxDry, wah, wahWet, phaser, phWet, analyser, mediaDest, glueIn;
+// The FX params whose schedules are tracked (see tracked): the filters' detune and Q, the wet/dry levels.
+const fxLine = {};
 let recorder = null;
 
 export const state = {
@@ -55,7 +57,9 @@ for (const l of LAYERS) {
   state.layers[l.id] = {
     song: null, type: null, volume: 0.85, muted: false,
     buffer: null, bufferKey: null, bufferBpm: 0,
-    source: null, srcGain: null, fxIn: null, gain: null, analyser: null,
+    // `cur` is the playing (or pending) source's record, `tails` the outgoing ones until they have
+    // ended (see startSource); `source` is cur's node, for the UI.
+    source: null, cur: null, tails: [], fxIn: null, insert: null, gain: null, analyser: null,
     loading: false, syncing: false, progress: 0, renderTag: 0,
     error: null, // why the layer couldn't follow the last tempo or key change, if it couldn't
   };
@@ -72,7 +76,7 @@ export const on = (ev, fn) => listeners[ev].push(fn);
 const emit = (ev, arg) => listeners[ev].forEach((fn) => { try { fn(arg); } catch (err) { console.error(err); } });
 // Every change also restarts the wait before the mix is kept for the next visit (see keepMix) and
 // before the next hq upgrade starts (see upgrade).
-const changed = () => { emit('change'); keepLater(); upgradeSoon(); };
+const changed = () => { emit('change'); keepLater(); upgradeSoon(); checkSoon(); };
 const status = (msg, kind) => emit('status', { msg, kind });
 
 // Why a stem didn't load, in words a player can act on (the details go to the console).
@@ -271,16 +275,16 @@ export function ensureCtx() {
   lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 22000;
   // Low-pass and High-pass sweep in cents (detune), which is exponential in Hz but ramps in
   // straight lines, so it can be tracked like the gains (see rampTracked).
-  for (const p of [hp.detune, hp.Q, lp.detune, lp.Q]) tracked(p, p.value);
-  fxDry = ctx.createGain(); tracked(fxDry.gain, 1);
+  Object.assign(fxLine, { hpDetune: tracked(hp.detune), hpQ: tracked(hp.Q), lpDetune: tracked(lp.detune), lpQ: tracked(lp.Q) });
+  fxDry = ctx.createGain(); fxLine.dry = tracked(fxDry.gain, 1);
   wah = ctx.createBiquadFilter(); wah.type = 'bandpass'; wah.frequency.value = WAH.center; wah.Q.value = WAH.q;
-  wahWet = ctx.createGain(); wahWet.gain.value = 0; tracked(wahWet.gain, 0);
+  wahWet = ctx.createGain(); wahWet.gain.value = 0; fxLine.wahWet = tracked(wahWet.gain, 0);
   phaser = Array.from({ length: PHASER.stages }, () => {
     const f = ctx.createBiquadFilter();
     f.type = 'allpass'; f.frequency.value = PHASER.low; f.Q.value = PHASER.q;
     return f;
   });
-  phWet = ctx.createGain(); phWet.gain.value = 0; tracked(phWet.gain, 0);
+  phWet = ctx.createGain(); phWet.gain.value = 0; fxLine.phWet = tracked(phWet.gain, 0);
   analyser = ctx.createAnalyser();
   analyser.fftSize = 512;
   analyser.smoothingTimeConstant = 0.8;
@@ -307,7 +311,7 @@ export function ensureCtx() {
     // Every source of the layer (playing, fading out, or waiting for its bar line) goes through
     // fxIn, so Stutter and Tape stop can silence all of them at once.
     s.fxIn = ctx.createGain();
-    tracked(s.fxIn.gain, 1);
+    s.insert = tracked(s.fxIn.gain, 1);
     if (keepAlive) keepAlive.connect(s.fxIn);
     s.gain = ctx.createGain();
     s.fxIn.connect(s.gain);
@@ -490,8 +494,7 @@ function entryBytes() {
   for (const l of LAYERS) {
     const s = state.layers[l.id];
     used.add(s.buffer);
-    if (s.source) used.add(s.source.buffer);
-    for (const x of s.tails || []) if (x.stopAt > ctx.currentTime) used.add(x.src.buffer);
+    for (const x of sourcesOf(s)) used.add(x.buf);
   }
   // A render is an AudioBuffer (32-bit floats); an original says what its 16-bit copy takes.
   return (e) => (e.buf && !used.has(e.buf) ? e.buf.bytes ?? e.buf.length * e.buf.numberOfChannels * 4 : 0);
@@ -622,20 +625,27 @@ const decode = (bytes) => new Promise((resolve, reject) => {
   if (p) p.catch(() => {}); // the callback reports it
 });
 
-// Whether a lossy decode lines up with its master sample for sample, as stems.json says it must
-// (measured from the WAV at build time): at least as long (codec padding after the end is trimmed,
-// see loopShape) and its alignment mark found where it is (within MARK_TOL samples: decoders round
-// differently, but none moved a mark at all in testing). A decoder that trims the start differently
-// would shift the stem against the others for as long as it plays. Safari's Ogg decoder is new (18.4)
-// and untested here; Chrome's and ffmpeg's match the WAVs exactly. Nothing to check against: true.
-const MARK_W = 4096, MARK_TOL = 8, PAD_MAX = 0.05;
-function exactDecode(info, type, buf) {
+// Whether a decode lines up with its master sample for sample, as stems.json says it must
+// (measured from the WAV at build time): at least as long (codec padding after the end is trimmed:
+// the loop is `frames` long, see getOriginal) and its alignment mark found where it is (within
+// MARK_TOL samples: decoders round differently, but none moved a mark at all in testing). A decoder
+// that trims the start differently would shift the stem against the others for as long as it plays,
+// and one that returns more or fewer samples would stretch a loop of the wrong length to the bar
+// grid: off tempo, drifting through every cycle. Safari's Ogg decoder is new (18.4) and untested
+// here; Chrome's and ffmpeg's match the WAVs exactly. A lossless decode (WebKit's first choice) is
+// checked too: a FLAC holds its exact length, but a decoder that rounded its last block (4096 frames
+// in these files) up or dropped it would pad or cut it, so up to a block either way is let through:
+// the loop is still `frames` long, trimmed, or padded with silence at its very end (see stretchStem).
+// Rejecting a FLAC a few frames short would leave a browser without Ogg (Safari before 18.4) with
+// nothing to play. Nothing to check against: true.
+const MARK_W = 4096, MARK_TOL = 8, PAD_MAX = 0.05, BLOCK_MAX = 4096;
+function exactDecode(info, type, buf, lossy) {
   const frames = info.frames && info.frames[type], mark = info.marks && info.marks[type];
   if (!frames || buf.sampleRate !== STEM_RATE) return true;
-  if (buf.length < frames || buf.length > frames + PAD_MAX * STEM_RATE) return false;
+  if (buf.length < frames - (lossy ? 0 : BLOCK_MAX) || buf.length > frames + (lossy ? PAD_MAX * STEM_RATE : BLOCK_MAX)) return false;
   if (!mark) return true;
   const [at, level] = mark, l = level / 32768, x = [0, 1].map((c) => buf.getChannelData(Math.min(c, buf.numberOfChannels - 1)));
-  for (let i = Math.max(0, at - MARK_W), end = Math.min(frames, at + MARK_TOL + 1); i < end; i++) {
+  for (let i = Math.max(0, at - MARK_W), end = Math.min(frames, buf.length, at + MARK_TOL + 1); i < end; i++) {
     if (Math.abs(x[0][i]) >= l || Math.abs(x[1][i]) >= l) return Math.abs(i - at) <= MARK_TOL;
   }
   return false;
@@ -734,7 +744,8 @@ function getOriginal(info, type, onProgress, early = false) {
     const progress = (p) => entry.listeners.forEach((fn) => fn(p));
     let decoded;
     const first = new Promise((resolve) => { decoded = resolve; });
-    // Lossy codecs pad a few ms that must be trimmed off the loop; WAVs and FLACs are the loop exactly.
+    // Lossy codecs pad a few ms that must be trimmed off the loop; WAVs and FLACs are the loop
+    // exactly, as long as the decoder says so (see exactDecode).
     const load = async (path) => {
       entry.downloading = true;
       let bytes, buf;
@@ -744,13 +755,13 @@ function getOriginal(info, type, onProgress, early = false) {
         throw Object.assign(new Error(`can't decode ${path}: ${(err && err.message) || err}`), { name: 'EncodingError' });
       }
       const lossy = !/\.(wav|flac)$/i.test(path);
-      if (lossy && !exactDecode(info, type, buf)) {
-        throw Object.assign(new Error(`${path} decodes as ${buf.length} samples at ${buf.sampleRate} Hz, out of line with its master`), { name: 'EncodingError' });
+      if (!exactDecode(info, type, buf, lossy)) {
+        throw Object.assign(new Error(`${path} decodes as ${buf.length} samples at ${buf.sampleRate} Hz, out of line with its master`), { name: 'EncodingError', mismatch: true });
       }
       // The first stretch can start from the decoder's floats at once (see render) instead of
-      // waiting 30-150 ms for the 16-bit copy, which lets them go once it's made. A lossy decode that
+      // waiting 30-150 ms for the 16-bit copy, which lets them go once it's made. A decode that
       // checked out is the master's loop exactly (`frames`), padding after it aside.
-      const frames = lossy && info.frames && buf.sampleRate === STEM_RATE ? info.frames[type] || 0 : 0;
+      const frames = info.frames && buf.sampleRate === STEM_RATE ? info.frames[type] || 0 : 0;
       const orig = { length: buf.length, frames, sampleRate: buf.sampleRate, lossy, floats: Array.from({ length: buf.numberOfChannels }, (_, c) => buf.getChannelData(c)) };
       decoded(orig);
       // A loudness to measure (local stems) goes first: the first render waits for it, not the copy.
@@ -775,7 +786,9 @@ function getOriginal(info, type, onProgress, early = false) {
           const bad = err.name === 'EncodingError';
           if (!bad && !/\(404\)/.test(err.message)) throw err;
           if (path === ogg) { if (bad) oggOk = false; else oggsMissing = true; } // for later picks too
-          if (path === flac && bad) flacOk = false;
+          // A FLAC that decodes but is out of line is that file's problem: later picks still try theirs
+          // (an Ogg mismatch, by contrast, is the browser's decoder: see exactDecode).
+          if (path === flac && bad && !err.mismatch) flacOk = false;
           undecodable ||= bad;
           last = err;
           console.warn('stem failed, trying the next copy:', path, err);
@@ -933,9 +946,12 @@ async function stretchStem(info, type, bpm, semis, { onProgress, ...job }) {
     gain = from16 ? orig.gain : 1;
     const out = [];
     for (let c = 0; c < 2; c++) {
+      // A lossless decode up to a block short of `frames` (see exactDecode) leaves the rest of the
+      // loop silent: new arrays start at zero, and only what the decode has is copied.
       const x = src[Math.min(c, src.length - 1)], y = from16 && int16 ? new Int16Array(inLen + spare) : new Float32Array(inLen);
-      if (!from16 || int16) await inSteps(inLen, copyInto, 0, x, y);
-      else await inSteps(inLen, scaleInto, 0, x, y, 1 / 32768);
+      const n = Math.min(inLen, x.length);
+      if (!from16 || int16) await inSteps(n, copyInto, 0, x, y);
+      else await inSteps(n, scaleInto, 0, x, y, 1 / 32768);
       out.push(y);
     }
     return out;
@@ -999,7 +1015,7 @@ function render(song, type, onProgress, at) {
 // works as before.
 // A render's grade is part of its id ('hq' for an upgrade, see upgrade), so a mix that was upgraded
 // after it was kept is stored again, and a reload takes the hq render of a key when there is one.
-const KEEP = { db: 'dcr-renders', store: 'mix', idle: 5000, version: 6 }; // bump `version` when renders change (6: the worker's faster 48 kHz conversion)
+const KEEP = { db: 'dcr-renders', store: 'mix', idle: 5000, version: 7 }; // bump `version` when renders change (6: the worker's faster 48 kHz conversion; 7: a lossless decode loops over stems.json's frames, not whatever length the decoder gave)
 const gradeOf = (buf) => (buf.upgraded ? 'hq' : 'fast');
 const keptId = (key, info, type, grade) => `${key}|${info.stems[type]}|${grade}|${KEEP.version}`;
 const idbDone = (req) => new Promise((resolve, reject) => { req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error); });
@@ -1160,13 +1176,18 @@ function nextBarTime() {
 }
 
 // Params this file automates (each source's fade gain, each layer's FX insert, the FX filters and
-// wet/dry levels) keep their schedule
-// as straight lines between known points, so the level at a future time is computed, not read:
-// AudioParam.value is only the level now, cancelAndHoldAtTime doesn't anchor a ramp that starts
-// after the last event, and Firefox lacks it.
-function tracked(param, v) { param.pts = [[0, v]]; return param; }
-function levelAt(param, t) {
-  const p = param.pts;
+// wet/dry levels) keep their schedule as straight lines between known points, so the level at a
+// future time is computed, not read: AudioParam.value is only the level now, cancelAndHoldAtTime
+// doesn't anchor a ramp that starts after the last event, and Firefox lacks it.
+// The points live on a record of the engine's own ({ param, pts }), held wherever the engine holds
+// the param's node, never on the AudioParam itself: WebKit may let an AudioParam's JS wrapper be
+// collected once nothing in JS refers to the param (only to its node), and `node.gain` then hands
+// back a fresh wrapper without the properties set on the old one. A fade-out read from such a param
+// threw, the stop after it was skipped, and the replaced stem looped on at its old tempo under the new
+// one for as long as the page was open. The record holding the param keeps its wrapper, too.
+const tracked = (param, v = param.value) => ({ param, pts: [[0, v]] });
+function levelAt(line, t) {
+  const p = line.pts;
   if (t <= p[0][0]) return p[0][1];
   let k = p.length - 1;
   while (p[k][0] > t) k--;
@@ -1174,22 +1195,55 @@ function levelAt(param, t) {
   return next ? v0 + (next[1] - v0) * (t - t0) / (next[0] - t0) : v0;
 }
 // From whatever level the param has at `from`, a straight line to v at `to`.
-function rampTracked(param, from, to, v) {
-  const v0 = levelAt(param, from);
+function rampTracked(line, from, to, v) {
+  const { param } = line, v0 = levelAt(line, from);
   param.cancelScheduledValues(from);
   param.linearRampToValueAtTime(v0, from); // the same line the schedule was on up to `from`
   param.linearRampToValueAtTime(v, to);
-  const pts = [...param.pts.filter(([t]) => t < from), [from, v0], [to, v]];
+  const pts = [...line.pts.filter(([t]) => t < from), [from, v0], [to, v]];
   while (pts.length > 2 && pts[1][0] <= ctx.currentTime) pts.shift(); // keep one point in the past
-  param.pts = pts;
+  line.pts = pts;
+}
+// Straight to v at t, whatever was scheduled (see restFx).
+function setTracked(line, t, v) {
+  line.param.cancelScheduledValues(t);
+  line.param.setValueAtTime(v, t);
+  line.pts = [[t, v]];
 }
 
-// `offset` is the loop position that should sound at `when`. `buffer` defaults to the layer's.
+// Every source this file starts is tracked by a record, from its start until it has ended:
+// { kind: 'layer' (a stem's loop) or 'repeat' (a Stutter repeat), layerId, src, nodes (disconnected
+// once it's gone), out (the last of them, into the layer), fade (its tracked fade gain), buf (its
+// AudioBuffer, held here: the buffer carries its trim, see trimOf, and `src.buffer` can hand back a
+// fresh wrapper without it in WebKit, see tracked), bpm (the tempo a layer source was rendered at),
+// startAt, stopAt (when it is due to be silent and stopped; Infinity while it plays on) }.
+// A layer's records are its `cur` and, once replaced, its `tails`; a held Stutter's are fxOn.repeats.
+const live = new Set();
+function track(x) {
+  live.add(x);
+  x.src.onended = () => gone(x);
+  if (!checkTimer) checkTimer = setInterval(checkSources, CHECK_MS);
+}
+// Once a source has ended its nodes are let go of, and the cache counts its buffer again (a replaced
+// pick's render, say): kept until the layer's next stop, it held a render (20-25 MB) per layer that
+// the cache had already counted as freed.
+function gone(x) {
+  if (!live.delete(x)) return;
+  for (const n of x.nodes) n.disconnect();
+  if (x.kind !== 'layer') return;
+  const s = state.layers[x.layerId];
+  s.tails = s.tails.filter((y) => y !== x);
+  if (s.cur === x) s.cur = s.source = null; // a looping source never ends by itself
+  trimCaches();
+}
+
+// `offset` is the loop position that should sound at `when`. It plays the layer's buffer, or the
+// one of `from` (a record of the layer's: Tape stop starts its sources again with what they played).
 // A start that would come too close to now (see soonest: the main thread was held up, or the
 // clock lags the audio) would be heard late and stay late, a flam against the other layers until
 // the layer restarts. It moves on to a later beat line instead, its loop position with it, so it
 // lands in time, and the old source plays on until then.
-function startSource(layerId, when, offset, buffer) {
+function startSource(layerId, when, offset, from) {
   const s = state.layers[layerId];
   const late = soonest() + XFADE - when;
   if (late > 0) {
@@ -1197,7 +1251,7 @@ function startSource(layerId, when, offset, buffer) {
     when += skip; offset += skip;
   }
   stopSource(layerId, when);
-  buffer ??= s.buffer;
+  const buffer = from ? from.buf : s.buffer, bpm = from ? from.bpm : s.bufferBpm;
   const dur = buffer.duration, len = buffer.length, sr = ctx.sampleRate;
   const at = frame(Math.max(when - XFADE, ctx.currentTime));
   const src = ctx.createBufferSource();
@@ -1208,7 +1262,6 @@ function startSource(layerId, when, offset, buffer) {
   const full = Math.max(when, at + 0.003);
   sg.gain.setValueAtTime(0, at);
   sg.gain.linearRampToValueAtTime(1, full);
-  sg.gain.pts = [[at, 0], [full, 1]];
   const trim = trimNode(ctx, buffer);
   src.connect(trim); trim.connect(sg);
   sg.connect(s.fxIn);
@@ -1223,17 +1276,22 @@ function startSource(layerId, when, offset, buffer) {
   }
   const f = Math.round((offset - (when - at) - behind) * sr); // the loop position at `at`, in whole frames
   src.start(at, (((f % len) + len) % len) / sr);
-  // Once it's gone, the cache counts its buffer again (a replaced pick's render, say), and the layer
-  // lets go of it: kept in s.tails until the layer's next stop, it held a render (20-25 MB) per layer
-  // that the cache had already counted as freed.
-  src.onended = () => { src.disconnect(); trim.disconnect(); sg.disconnect(); s.tails = (s.tails || []).filter((x) => x.src !== src); trimCaches(); };
+  const x = { kind: 'layer', layerId, src, nodes: [src, trim, sg], out: sg, fade: { param: sg.gain, pts: [[at, 0], [full, 1]] },
+    buf: buffer, bpm, startAt: at, stopAt: Infinity };
+  track(x);
+  s.cur = x;
   s.source = src;
-  s.srcGain = sg;
-  s.startAt = at;
 }
 
-// Fade from wherever the gain is at `begin` (it may still be fading in), not from 1.
-const fadeOut = (sg, begin, end) => rampTracked(sg.gain, begin, end, 0);
+// Ends a source by `end`, fading it out over [begin, end] from wherever its gain is at `begin` (it
+// may still be fading in). The stop comes first, on its own: a fade that fails can't keep a source
+// playing (at worst it clicks). A second stop() throws in WebKit before 14.1; the earlier stop
+// stands then, and the fade silences it from `end`.
+function endAt(x, begin, end) {
+  try { x.src.stop(end + 0.02); } catch (_) { /* stopped already */ }
+  x.stopAt = Math.min(x.stopAt, end + 0.02);
+  try { rampTracked(x.fade, begin, end, 0); } catch (err) { console.error('a fade-out failed (the source stops all the same):', err); }
+}
 
 // Fades a layer out by `when` (its bar line), or as soon as possible.
 function stopSource(layerId, when) {
@@ -1241,37 +1299,90 @@ function stopSource(layerId, when) {
   const end = Math.max(when ?? 0, ctx.currentTime + XFADE), begin = end - XFADE;
   // An outgoing source from an earlier swap may still be due to play past `end` (Stop pressed,
   // or a tempo restart, before that bar line): fade it out by then as well.
-  s.tails = (s.tails || []).filter((x) => x.stopAt > ctx.currentTime);
-  for (const x of s.tails) {
-    if (x.stopAt <= end) continue;
-    try {
-      fadeOut(x.sg, begin, end);
-      x.src.stop(end + 0.02);
-      x.stopAt = end + 0.02;
-    } catch (_) { /* already stopped */ }
-  }
-  if (!s.source) return;
-  try {
-    if (begin <= s.startAt) {
-      s.source.stop(); // not started by the time the fade would begin: stopped before its start, it never sounds
-    } else {
-      fadeOut(s.srcGain, begin, end);
-      s.source.stop(end + 0.02);
-      s.tails.push({ src: s.source, sg: s.srcGain, startAt: s.startAt, stopAt: end + 0.02 });
-    }
-  } catch (_) { /* already stopped */ }
-  s.source = null;
-  s.srcGain = null;
+  for (const x of s.tails) if (x.stopAt > end) endAt(x, begin, end);
+  const x = s.cur;
+  if (!x) return;
+  if (begin <= x.startAt) { unstart(s); return; } // not started by the time the fade would begin: stopped before its start, it never sounds
+  s.cur = s.source = null;
+  s.tails.push(x); // until it has ended (see gone)
+  endAt(x, begin, end);
+}
+// Takes a layer's pending source off before its start, so it never sounds; returns its record.
+function unstart(s) {
+  const x = s.cur;
+  s.cur = s.source = null;
+  s.tails.push(x);
+  x.stopAt = ctx.currentTime;
+  try { x.src.stop(); } catch (_) { /* stopped already */ }
+  x.out.disconnect(); // and off the layer, so it can't sound whatever the browser makes of that stop
+  return x;
 }
 
-// The sources of a layer that are or will be sounding, outgoing ones included: { src, startAt }.
-const sourcesOf = (s) => [...(s.tails || []).filter((x) => x.stopAt > ctx.currentTime), ...(s.source ? [{ src: s.source, startAt: s.startAt }] : [])];
+// The sources of a layer that are or will be sounding, outgoing ones included (records, see startSource).
+const sourcesOf = (s) => [...s.tails.filter((x) => x.stopAt > ctx.currentTime), ...(s.cur ? [s.cur] : [])];
 
 // The buffer a layer is heard playing at time t: until a pending swap's bar line, the outgoing one.
 function bufferAt(s, t) {
-  const heard = [...(s.tails || []), ...(s.source ? [{ src: s.source, startAt: s.startAt, stopAt: Infinity }] : [])]
-    .filter((x) => x.startAt <= t && x.stopAt > t);
-  return heard.length ? heard[heard.length - 1].src.buffer : null;
+  const heard = [...s.tails, ...(s.cur ? [s.cur] : [])].filter((x) => x.startAt <= t && x.stopAt > t);
+  return heard.length ? heard[heard.length - 1].buf : null;
+}
+
+// The backstop: whatever the browser makes of a stop or a fade, no source plays on once it should
+// have gone, and none plays out of time. Checked after every change, and every CHECK_MS while any
+// source lives:
+// - a source past its stop (by GRACE: `ended` comes from the audio thread, and a busy main thread
+//   hears of it later) that still hasn't ended is cut off: its gain leaves the layer, and it is
+//   stopped again. Nothing that should still sound is past its stop: a pending swap's outgoing source
+//   stops on its bar line, Stutter's repeats and Tape stop's braked sources once let go.
+// - one meant to play on (stopAt Infinity) that nothing holds (not its layer's `cur`, not a held
+//   Stutter's repeat) fades out now.
+// - a stopped jam plays nothing; a cleared layer leaves on the next bar line unless a tempo restart
+//   is on its way to take it out (see clearLayer); a layer heard at another tempo than the clock's is
+//   started again in time, or stopped if it has nothing at the clock's tempo.
+// Only the first can come from the browser (a stop it ignored, an `ended` it never sent); the others
+// would be the engine's own mistakes, and say so in the console. sourceHealth() counts them all.
+const GRACE = 0.5, CHECK_MS = 500;
+let checkTimer = 0, checkQueued = false;
+const health = { cut: 0, orphaned: 0, stray: 0, offTempo: 0 };
+export const sourceHealth = () => ({ live: live.size, ...health });
+function checkSoon() {
+  if (ctx && !checkQueued) { checkQueued = true; setTimeout(checkSources); }
+}
+function checkSources() {
+  checkQueued = false;
+  if (!ctx) return;
+  for (const x of [...live]) {
+    if (x.stopAt === Infinity) {
+      if (x.kind === 'layer' ? state.layers[x.layerId].cur === x : !!(fxOn && fxOn.repeats && fxOn.repeats.includes(x))) continue;
+      health.orphaned++;
+      console.warn(`a ${x.kind} source on ${x.layerId} was left playing: fading it out`);
+      const end = soonest() + XFADE;
+      endAt(x, end - XFADE, end);
+      if (x.kind === 'layer' && !state.layers[x.layerId].tails.includes(x)) state.layers[x.layerId].tails.push(x);
+    } else if (ctx.currentTime > x.stopAt + GRACE) {
+      health.cut++;
+      x.out.disconnect();
+      try { x.src.stop(); } catch (_) { /* stopped already */ }
+      gone(x);
+    }
+  }
+  // A cleared layer still sounding is waiting to leave with a tempo restart (see clearLayer), or with
+  // the pass a tempo nudge has queued (see setBpm), which takes it out on the next bar line if the
+  // tempo came back: not a stray until neither is on its way.
+  const leaving = clockBpm !== state.bpm || tempoAt || resyncRun || bpmDue;
+  for (const l of LAYERS) {
+    const s = state.layers[l.id], x = s.cur;
+    if (!x || (state.playing && (s.song ? x.bpm === clockBpm : leaving))) continue;
+    const offTempo = state.playing && !!s.song;
+    health[offTempo ? 'offTempo' : 'stray']++;
+    console.warn(`${l.id}: ${!state.playing ? 'still playing after the jam stopped' : !s.song ? 'still playing after it was cleared'
+      : `playing at ${x.bpm} BPM against the clock's ${clockBpm}`}: ${offTempo ? 'starting it again in time' : 'stopping it'}`);
+    if (!state.playing) { stopSource(l.id); continue; }
+    const t = nextBarTime();
+    if (s.song && s.buffer && s.bufferBpm === clockBpm && !s.loading) startSource(l.id, t, t - state.transportStart);
+    else stopSource(l.id, t);
+  }
+  if (!live.size) { clearInterval(checkTimer); checkTimer = 0; }
 }
 
 // ---------- swap groups ----------
@@ -1413,7 +1524,7 @@ function swapIn(id, buf) {
   if ([...openGroups].some((g) => g.members.has(id))) return;
   const was = s.buffer;
   s.buffer = buf;
-  if (state.playing && s.source && s.source.buffer === was && s.bufferBpm === clockBpm) { const t = nextBarTime(); startSource(id, t, t - state.transportStart); }
+  if (state.playing && s.cur && s.cur.buf === was && s.bufferBpm === clockBpm) { const t = nextBarTime(); startSource(id, t, t - state.transportStart); }
   changed();
 }
 
@@ -1632,7 +1743,7 @@ async function resyncOnce() {
     const go = (t) => {
       for (const r of fresh) {
         const s = state.layers[r.id];
-        if (s.bufferKey === r.job.key && !s.loading && isCurrent(s)) startSource(r.id, t, t - state.transportStart);
+        if (s.bufferKey === r.job.key && !s.loading && isCurrent(s) && s.bufferBpm === clockBpm) startSource(r.id, t, t - state.transportStart);
       }
     };
     // Re-keyed for a new anchor pick: drop in on the same bar as that pick (the latest one, if
@@ -1642,7 +1753,7 @@ async function resyncOnce() {
   }
   // A cleared layer waiting to leave with a tempo restart that isn't coming (the tempo went back,
   // or no layer could follow it) leaves on the next bar line instead.
-  if (state.playing && !tempoMoves) for (const l of LAYERS) if (!state.layers[l.id].song && state.layers[l.id].source) stopSource(l.id, nextBarTime());
+  if (state.playing && !tempoMoves) for (const l of LAYERS) if (!state.layers[l.id].song && state.layers[l.id].cur) stopSource(l.id, nextBarTime());
   for (const g of groups) settle(g, 'resync'); // nothing (more) to start for it
   // A layer that failed earlier is fine again once the settings come back to what it has.
   for (const id of activeLayers()) if (isCurrent(state.layers[id])) state.layers[id].error = null;
@@ -1752,7 +1863,7 @@ export async function selectStem(layerId, song, opts = {}) {
       if (job.bpm === clockBpm) {
         // Rendered for an older key (it moved while this loaded): the resync below starts the re-render.
         const go = (t) => {
-          if (state.playing && s.renderTag === tag && s.buffer === buf && isCurrent(s)) startSource(layerId, t, t - state.transportStart);
+          if (state.playing && s.renderTag === tag && s.buffer === buf && isCurrent(s) && s.bufferBpm === clockBpm) startSource(layerId, t, t - state.transportStart);
         };
         if (!settle(group, layerId, go)) go(nextBarTime());
       } else {
@@ -1781,7 +1892,7 @@ export async function selectStem(layerId, song, opts = {}) {
     const rootBefore = masterRoot();
     s.song = s.type = s.buffer = s.bufferKey = null;
     state.anchorOrder = state.anchorOrder.filter((x) => x !== layerId);
-    if (!activeLayers().length) { state.playing = false; wantPlay = false; }
+    if (!activeLayers().length) endJam();
     status(loadError(song, err), 'error');
     // The average goes back to the stems that are left, unless the tempo was set by hand (or by a
     // share link) since.
@@ -1795,6 +1906,14 @@ export async function selectStem(layerId, song, opts = {}) {
     if (!state.playing && (wantPlay || (!opts.noAutoplay && gen === playGen)) && activeLayers().length
       && activeLayers().every((id) => !state.layers[id].loading)) play();
   }
+}
+
+// The last stem has gone: the music stops, every layer's sources with it. A layer cleared just before
+// may still be playing, waiting to leave with a tempo restart (see clearLayer) that won't come now.
+function endJam() {
+  if (ctx) for (const l of LAYERS) stopSource(l.id);
+  state.playing = false;
+  wantPlay = false;
 }
 
 export function clearLayer(layerId) {
@@ -1825,7 +1944,7 @@ export function clearLayer(layerId) {
   s.song = s.type = s.buffer = s.bufferKey = s.error = null;
   s.loading = s.syncing = false;
   state.anchorOrder = state.anchorOrder.filter((x) => x !== layerId);
-  if (!activeLayers().length) { state.playing = false; playGen++; wantPlay = false; }
+  if (!activeLayers().length) { endJam(); playGen++; }
   abortUnwanted(); // its download, if it was still coming
   changed();
   if (auto || (masterRoot() !== rootBefore && masterRoot() !== null)) rebuildAll();
@@ -1892,7 +2011,7 @@ function autoTempo(picks, near) {
 }
 
 // ---------- mix settings ----------
-let bpmTimer;
+let bpmTimer, bpmDue = false; // bpmDue: a nudge's pass is still waiting to run (see checkSources)
 export function setBpm(bpm, { immediate = false } = {}) {
   bpm = Math.max(BPM_MIN, Math.min(BPM_MAX, Math.round(bpm)));
   if (bpm === state.bpm) return;
@@ -1903,7 +2022,8 @@ export function setBpm(bpm, { immediate = false } = {}) {
   pumpJobs(); // a pre-render at the old tempo stops now
   clearTimeout(bpmTimer);
   // Rendering is heavy; wait until the user stops nudging.
-  bpmTimer = setTimeout(rebuildAll, immediate ? 0 : 450);
+  bpmDue = true;
+  bpmTimer = setTimeout(() => { bpmDue = false; rebuildAll(); }, immediate ? 0 : 450);
 }
 export function setKeyLock(on) { state.keyLock = on; changed(); rebuildAll(); }
 export function setMasterKey(k) { state.masterKey = k; changed(); rebuildAll(); }
@@ -2086,29 +2206,30 @@ function startRepeats(after = 0) {
     const gate = ctx.createGain(), fade = ctx.createGain();
     gate.gain.setValueAtTime(0, ctx.currentTime);
     gateSlices(gate.gain, t0, slice, 0, slices);
-    tracked(fade.gain, 1); // the gate's schedule stays as it is; letting go fades this one out
     const src = ctx.createBufferSource();
     src.buffer = buffer; src.loop = true; src.loopStart = from; src.loopEnd = from + slice;
     const trim = trimNode(ctx, buffer); // at the level the stem was playing
     src.connect(trim); trim.connect(gate); gate.connect(fade);
     fade.connect(s.gain); // past the FX insert, which mutes the real sources
     src.start(t0, from);
-    repeats.push({ lid, src, gate, fade, trim, t0, slice, slices, perBar });
+    // The gate's schedule stays as it is; letting go fades `fade` out (see stopRepeats).
+    const r = { kind: 'repeat', layerId: lid, lid, src, nodes: [src, trim, gate, fade], out: fade, fade: tracked(fade.gain, 1),
+      buf: buffer, gate, t0, slice, slices, perBar, startAt: t0, stopAt: Infinity };
+    track(r);
+    repeats.push(r);
   }
   return { repeats, t0 };
 }
 
-// Fades repeats out over [t, t + len]. On a gain of their own, not the gate: freezing the gate's
-// schedule (cancelAndHoldAtTime) between two of its events made Chromium jump from full level to
-// a quarter in one sample (measured on 5 of 12 releases before), and Firefox has no such call.
+// Fades repeats out over [t, t + len], and stops them (see endAt). On a gain of their own, not the
+// gate: freezing the gate's schedule (cancelAndHoldAtTime) between two of its events made Chromium
+// jump from full level to a quarter in one sample (measured on 5 of 12 releases before), and
+// Firefox has no such call.
 function stopRepeats(repeats, t, len = 0.01) {
   for (const r of repeats) {
     if (r.until <= t + len) continue; // fading out by then already
-    const { src, gate, fade, trim } = r;
-    rampTracked(fade.gain, t, t + len, 0);
     r.until = t + len;
-    try { src.stop(t + len + 0.02); } catch (_) { /* already stopped */ }
-    src.onended = () => { src.disconnect(); trim.disconnect(); gate.disconnect(); fade.disconnect(); };
+    endAt(r, t, t + len);
   }
 }
 // The repeats still sounding at t: the held Stutter's, and old ones still handing over to them.
@@ -2141,62 +2262,66 @@ function regate(repeats) {
 // Brings every layer's FX insert back to full level over [t, t + 0.01].
 function openInserts(t) {
   for (const l of LAYERS) {
-    const g = state.layers[l.id].fxIn;
-    if (g) rampTracked(g.gain, t, t + 0.01, 1);
+    const g = state.layers[l.id].insert;
+    if (g) rampTracked(g, t, t + 0.01, 1);
   }
 }
 
 export function fxStart(id) {
   if (!ctx || fxOn) return;
   const t = ctx.currentTime + 0.005;
-  fxOn = { id, t };
-  if (id === 'lowpass') { // sweeps down while held (to 260 Hz at full Depth), so a longer hold goes deeper
-    rampTracked(lp.detune, t, t + 1.6, lpCents());
-    rampTracked(lp.Q, t, t + 0.4, fxSet.lowpass.res);
-  } else if (id === 'highpass') { // up to 2.4 kHz at full Depth
-    rampTracked(hp.detune, t, t + 1.6, hpCents());
-    rampTracked(hp.Q, t, t + 0.4, fxSet.highpass.res);
-  } else if (id === 'phaser') {
-    // The stages rest at the bottom of the sweep; the LFO starts at its trough, so it lifts them
-    // from exactly there (cos, offset by half the range): every press is the same rising swoosh.
-    const half = PHASER.range / 2, { wet, dry } = phaserMix();
-    for (const f of phaser) { f.detune.cancelScheduledValues(t); f.detune.setValueAtTime(half, t); }
-    startSweep('phaser', phaser.map((f) => f.detune), -half, fxSet.phaser.speed, 0, t);
-    rampTracked(phWet.gain, t, t + 0.08, wet);
-    rampTracked(fxDry.gain, t, t + 0.08, dry);
-  } else if (id === 'wah') {
-    startWah(t);
-    rampTracked(wahWet.gain, t, t + 0.05, WAH.wet);
-    rampTracked(fxDry.gain, t, t + 0.05, WAH.dry);
-  } else if (id === 'stutter' && state.playing) {
-    // The repeats stand in for the real sources, which are muted at the layer's FX insert (so a
-    // swap landing during the hold stays muted too); letting go lands back exactly in time.
-    const { repeats, t0 } = startRepeats();
-    fxOn.repeats = repeats;
-    // Every layer, so one leaving or joining during the hold stays quiet too.
-    for (const l of LAYERS) rampTracked(state.layers[l.id].fxIn.gain, t0 - GATE.attack, t0, 0);
-  } else if (id === 'tapestop' && state.playing) {
-    // Slow every source down (outgoing and pending ones too); letting go restarts them in sync
-    // with the clock. At full Amount it's a halt, and the layers fade out at the end of it.
-    const { len, amount } = fxSet.tapestop;
-    fxOn.len = barSec() * len; // in beats or bars, so it lands like a played break at any tempo
-    fxOn.floor = Math.max(0.0001, 1 - amount);
-    fxOn.layers = playingLayers();
-    for (const l of LAYERS) {
-      const s = state.layers[l.id];
-      // A swap waiting for its bar line was set to start where the clock will be, ahead of the
-      // braked source it takes over from: scheduled again, it starts where that one will be (see
-      // startSource). One too close to start again safely (see soonest) is left: it starts at most
-      // 0.25 ms ahead on a desktop.
-      if (s.source && s.startAt > soonest()) {
-        const { buffer } = s.source, when = s.startAt + XFADE;
-        s.source.stop(); // before its start: it never sounds
-        s.source = null;
-        startSource(l.id, when, when - state.transportStart, buffer);
+  fxOn = { id, t }; // first: what starts from here on reads it (see startSource, startRepeats)
+  try {
+    if (id === 'lowpass') { // sweeps down while held (to 260 Hz at full Depth), so a longer hold goes deeper
+      rampTracked(fxLine.lpDetune, t, t + 1.6, lpCents());
+      rampTracked(fxLine.lpQ, t, t + 0.4, fxSet.lowpass.res);
+    } else if (id === 'highpass') { // up to 2.4 kHz at full Depth
+      rampTracked(fxLine.hpDetune, t, t + 1.6, hpCents());
+      rampTracked(fxLine.hpQ, t, t + 0.4, fxSet.highpass.res);
+    } else if (id === 'phaser') {
+      // The stages rest at the bottom of the sweep; the LFO starts at its trough, so it lifts them
+      // from exactly there (cos, offset by half the range): every press is the same rising swoosh.
+      const half = PHASER.range / 2, { wet, dry } = phaserMix();
+      for (const f of phaser) { f.detune.cancelScheduledValues(t); f.detune.setValueAtTime(half, t); }
+      startSweep('phaser', phaser.map((f) => f.detune), -half, fxSet.phaser.speed, 0, t);
+      rampTracked(fxLine.phWet, t, t + 0.08, wet);
+      rampTracked(fxLine.dry, t, t + 0.08, dry);
+    } else if (id === 'wah') {
+      startWah(t);
+      rampTracked(fxLine.wahWet, t, t + 0.05, WAH.wet);
+      rampTracked(fxLine.dry, t, t + 0.05, WAH.dry);
+    } else if (id === 'stutter' && state.playing) {
+      // The repeats stand in for the real sources, which are muted at the layer's FX insert (so a
+      // swap landing during the hold stays muted too); letting go lands back exactly in time.
+      const { repeats, t0 } = startRepeats();
+      fxOn.repeats = repeats;
+      // Every layer, so one leaving or joining during the hold stays quiet too.
+      for (const l of LAYERS) rampTracked(state.layers[l.id].insert, t0 - GATE.attack, t0, 0);
+    } else if (id === 'tapestop' && state.playing) {
+      // Slow every source down (outgoing and pending ones too); letting go restarts them in sync
+      // with the clock. At full Amount it's a halt, and the layers fade out at the end of it.
+      const { len, amount } = fxSet.tapestop;
+      fxOn.len = barSec() * len; // in beats or bars, so it lands like a played break at any tempo
+      fxOn.floor = Math.max(0.0001, 1 - amount);
+      fxOn.layers = playingLayers();
+      for (const l of LAYERS) {
+        const s = state.layers[l.id];
+        // A swap waiting for its bar line was set to start where the clock will be, ahead of the
+        // braked source it takes over from: scheduled again, it starts where that one will be (see
+        // startSource). One too close to start again safely (see soonest) is left: it starts at most
+        // 0.25 ms ahead on a desktop.
+        if (s.cur && s.cur.startAt > soonest()) {
+          const x = unstart(s), when = x.startAt + XFADE;
+          startSource(l.id, when, when - state.transportStart, x);
+        }
+        for (const x of sourcesOf(s)) slowToHalt(x.src.playbackRate, t, fxOn.len, fxOn.floor, x.startAt);
+        if (amount >= 0.95) rampTracked(s.insert, t + 0.7 * fxOn.len, t + fxOn.len, 0);
       }
-      for (const x of sourcesOf(s)) slowToHalt(x.src.playbackRate, t, fxOn.len, fxOn.floor, x.startAt);
-      if (amount >= 0.95) rampTracked(s.fxIn.gain, t + 0.7 * fxOn.len, t + fxOn.len, 0);
     }
+  } catch (err) {
+    // A hold that half started is let go of at once: left on, it would hold every pick back.
+    console.error(`${id} couldn't start:`, err);
+    fxStop();
   }
 }
 
@@ -2212,18 +2337,18 @@ export function setFxParam(id, key, value) {
   if (!ctx || !fxOn || fxOn.id !== id) return;
   const t = ctx.currentTime + 0.005;
   if (id === 'lowpass' || id === 'highpass') {
-    const f = id === 'lowpass' ? lp : hp;
+    const [detune, q] = id === 'lowpass' ? [fxLine.lpDetune, fxLine.lpQ] : [fxLine.hpDetune, fxLine.hpQ];
     // the depth keeps to the press's sweep if that's still going, so a hold still goes deeper
-    if (key === 'depth') rampTracked(f.detune, t, Math.max(t + 0.15, fxOn.t + 1.6), id === 'lowpass' ? lpCents() : hpCents());
-    else rampTracked(f.Q, t, t + 0.08, value);
+    if (key === 'depth') rampTracked(detune, t, Math.max(t + 0.15, fxOn.t + 1.6), id === 'lowpass' ? lpCents() : hpCents());
+    else rampTracked(q, t, t + 0.08, value);
   } else if (id === 'phaser') {
     if (key === 'speed' && sweeps.phaser) {
       sweeps.phaser.perBar = value;
       sweeps.phaser.osc.frequency.setValueAtTime(value / barSec(), t);
     } else if (key === 'mix') {
       const { wet, dry } = phaserMix();
-      rampTracked(phWet.gain, t, t + 0.08, wet);
-      rampTracked(fxDry.gain, t, t + 0.08, dry);
+      rampTracked(fxLine.phWet, t, t + 0.08, wet);
+      rampTracked(fxLine.dry, t, t + 0.08, dry);
     }
   } else if (id === 'wah') {
     startWah(t);
@@ -2233,7 +2358,8 @@ export function setFxParam(id, key, value) {
   }
 }
 
-// Letting go. With { cancel: true } (Stop pressed while held) nothing is restarted.
+// Letting go. With { cancel: true } (Stop pressed while held) nothing is restarted. Whatever
+// happens in it, the hold ends and the picks made during it drop in.
 export function fxStop({ cancel = false } = {}) {
   if (!ctx || !fxOn) return;
   const { id } = fxOn, t = ctx.currentTime + 0.005;
@@ -2243,46 +2369,60 @@ export function fxStop({ cancel = false } = {}) {
   // if the other layers aren't rendered yet: until then the old songs play on, so none drops out.
   const dropping = new Set(clockBpm !== state.bpm ? [] : heldGroups().filter((g) => g.waiting.size === 1).flatMap((g) => [...g.ready]));
   let dropAt = frame(ctx.currentTime + LEAD);
-  if (id === 'lowpass') {
-    rampTracked(lp.detune, t, t + 0.12, 0);
-    rampTracked(lp.Q, t, t + 0.12, 0.7);
-  } else if (id === 'highpass') {
-    rampTracked(hp.detune, t, t + 0.12, 0);
-    rampTracked(hp.Q, t, t + 0.12, 0.7);
-  } else if (id === 'phaser') {
-    rampTracked(phWet.gain, t, t + 0.15, 0);
-    rampTracked(fxDry.gain, t, t + 0.15, 1);
-    // Once the wet path is silent, the sweep stops and the stages go back to rest.
-    stopSweep('phaser', t + 0.16);
-    for (const f of phaser) f.detune.setValueAtTime(0, t + 0.16);
-  } else if (id === 'wah') {
-    rampTracked(wahWet.gain, t, t + 0.06, 0);
-    rampTracked(fxDry.gain, t, t + 0.06, 1);
-    stopSweep('wah', t + 0.07);
-  } else if (id === 'stutter' && fxOn.repeats) {
-    stopRepeats(repeatsAt(t), t);
-    // On Stop the sources are fading out right now: open the inserts only once they're silent.
-    openInserts(cancel ? t + 0.04 : t);
-  } else if (id === 'tapestop' && fxOn.layers) {
-    // The slowed sources fade out first; the inserts open once they're silent and the restarted
-    // sources come in after that, so a stalled source's frozen sample never meets a rising gain.
-    const at = t + 0.02;
-    // Each layer comes back with the stem it was last scheduled to play. A pick that is ready but
-    // waiting for the rest of its group (or still loading) follows on its own bar line.
-    const back = new Map(activeLayers().filter((lid) => state.layers[lid].source).map((lid) => [lid, state.layers[lid].source.buffer]));
-    for (const l of LAYERS) stopSource(l.id, at); // includes sources that joined during the hold
-    fxOn = null; // the restarts below play at normal speed
-    openInserts(at + 0.01);
-    if (!cancel && state.playing) {
-      // The new picks come in with the restarts instead of their layers' old songs.
-      const when = Math.max(at + 0.04, ctx.currentTime + LEAD); // as soon as a restart can't come in late
-      for (const [lid, buffer] of back) if (!dropping.has(lid)) startSource(lid, when, when - state.transportStart, buffer);
-      dropAt = frame(when);
+  try {
+    if (id === 'lowpass') {
+      rampTracked(fxLine.lpDetune, t, t + 0.12, 0);
+      rampTracked(fxLine.lpQ, t, t + 0.12, 0.7);
+    } else if (id === 'highpass') {
+      rampTracked(fxLine.hpDetune, t, t + 0.12, 0);
+      rampTracked(fxLine.hpQ, t, t + 0.12, 0.7);
+    } else if (id === 'phaser') {
+      rampTracked(fxLine.phWet, t, t + 0.15, 0);
+      rampTracked(fxLine.dry, t, t + 0.15, 1);
+      // Once the wet path is silent, the sweep stops and the stages go back to rest.
+      stopSweep('phaser', t + 0.16);
+      for (const f of phaser) f.detune.setValueAtTime(0, t + 0.16);
+    } else if (id === 'wah') {
+      rampTracked(fxLine.wahWet, t, t + 0.06, 0);
+      rampTracked(fxLine.dry, t, t + 0.06, 1);
+      stopSweep('wah', t + 0.07);
+    } else if (id === 'stutter' && fxOn.repeats) {
+      stopRepeats(repeatsAt(t), t);
+      // On Stop the sources are fading out right now: open the inserts only once they're silent.
+      openInserts(cancel ? t + 0.04 : t);
+    } else if (id === 'tapestop' && fxOn.layers) {
+      // The slowed sources fade out first; the inserts open once they're silent and the restarted
+      // sources come in after that, so a stalled source's frozen sample never meets a rising gain.
+      const at = t + 0.02;
+      // Each layer comes back with the stem it was last scheduled to play. A pick that is ready but
+      // waiting for the rest of its group (or still loading) follows on its own bar line.
+      const back = new Map(activeLayers().filter((lid) => state.layers[lid].cur).map((lid) => [lid, state.layers[lid].cur]));
+      for (const l of LAYERS) stopSource(l.id, at); // includes sources that joined during the hold
+      fxOn = null; // the restarts below play at normal speed
+      openInserts(at + 0.01);
+      if (!cancel && state.playing) {
+        // The new picks come in with the restarts instead of their layers' old songs.
+        const when = Math.max(at + 0.04, ctx.currentTime + LEAD); // as soon as a restart can't come in late
+        for (const [lid, x] of back) if (!dropping.has(lid)) startSource(lid, when, when - state.transportStart, x);
+        dropAt = frame(when);
+      }
     }
+  } catch (err) {
+    console.error(`${id} couldn't let go cleanly, so the effects are reset:`, err);
+    restFx(t);
+  } finally {
+    fxOn = null;
+    for (const l of LAYERS) state.layers[l.id].heldFrom = undefined;
+    dropHeld(dropAt);
   }
-  fxOn = null;
-  for (const l of LAYERS) state.layers[l.id].heldFrom = undefined;
-  dropHeld(dropAt);
+}
+
+// Every effect back at rest from t, the hard way: for a release that failed half-way.
+function restFx(t) {
+  const rest = { lpDetune: 0, lpQ: 0.7, hpDetune: 0, hpQ: 0.7, dry: 1, wahWet: 0, phWet: 0 };
+  const lines = [...Object.entries(rest).map(([k, v]) => [fxLine[k], v]), ...LAYERS.map((l) => [state.layers[l.id].insert, 1])];
+  for (const [line, v] of lines) try { setTracked(line, t, v); } catch (err) { console.error(err); }
+  stopSweep('phaser', t); stopSweep('wah', t);
 }
 
 // ---------- meters (for the visuals) ----------
