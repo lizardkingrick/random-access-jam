@@ -1,5 +1,5 @@
-// Builds dist/ (the static site + Ogg stems) and uploads it to Cloudflare
-// (Workers static assets, configured in wrangler.jsonc).
+// Builds dist/ (the static site + Ogg stems, and FLAC stems when stems.json lists them) and uploads
+// it to Cloudflare (Workers static assets, configured in wrangler.jsonc).
 // The stems never go through git — they're uploaded straight from this machine.
 // Usage:  npm run deploy            (production → dreamchamberremixed.xyz)
 //         npm run deploy -- preview (upload a version with a preview URL; live site untouched)
@@ -14,12 +14,14 @@ const DIST = join(ROOT, 'dist');
 const SITE = ['index.html', 'style.css', 'solid.css', 'manifest.webmanifest', 'icons', 'stems.json', '_headers', 'js', 'stems-ogg'];
 const OPTIONAL = ['covers']; // album covers, if you've built them (npm run covers)
 
-for (const f of SITE) {
-  if (!existsSync(join(ROOT, f))) {
-    console.error(`Missing ${f}.` + (f.startsWith('stems') ? ' Run `npm run stems` first.' : ''));
-    process.exit(1);
-  }
-}
+const fail = (msg) => { console.error(msg); process.exit(1); };
+for (const f of SITE) if (!existsSync(join(ROOT, f))) fail(`Missing ${f}.` + (f.startsWith('stems') ? ' Run `npm run stems` first.' : ''));
+// Every stem file stems.json lists has to ship: without its FLACs, older Safari gets no sound at all.
+const listed = Object.values(JSON.parse(readFileSync(join(ROOT, 'stems.json'), 'utf8')))
+  .flatMap((e) => [...Object.values(e.oggs || {}), ...Object.values(e.flacs || {})]);
+if (listed.some((p) => p.startsWith('stems-flac/'))) SITE.push('stems-flac');
+const missing = listed.filter((p) => !existsSync(join(ROOT, p)));
+if (missing.length) fail(`${missing.length} stem files listed in stems.json are missing (${missing[0]}). Run \`npm run stems\` first.`);
 rmSync(DIST, { recursive: true, force: true });
 mkdirSync(DIST);
 for (const f of SITE) cpSync(join(ROOT, f), join(DIST, f), { recursive: true });

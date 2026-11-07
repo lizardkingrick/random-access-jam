@@ -13,7 +13,7 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
 
 createServer(async (req, res) => {
   let path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  if (/^\/(stems-ogg|covers)\//.test(path)) {
+  if (/^\/(stems-ogg|stems-flac|covers)\//.test(path)) {
     const up = await fetch(LIVE + req.url).catch(() => null);
     if (!up || !up.ok) { res.writeHead(up ? up.status : 502); return res.end(); }
     const headers = { 'Content-Type': up.headers.get('content-type') || 'application/octet-stream', 'Cache-Control': 'public, max-age=86400' };

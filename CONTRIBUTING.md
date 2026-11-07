@@ -43,7 +43,7 @@ and needs no audio.
 ### Ground rules
 
 - **Never commit audio or album art.** `.gitignore` keeps out stems (`*.wav`, `*.ogg`, `*.flac`,
-  `stems-ogg/`) and `covers/`. Don't force them in.
+  `stems-ogg/`, `stems-flac/`) and `covers/`. Don't force them in.
 - **No new runtime dependencies** without talking about it in an issue first. The app loads
   nothing from npm at runtime. Three.js is vendored and trimmed.
 - Keep the layout working on every screen. The whole UI scales from one size unit (`--u` in
@@ -68,7 +68,7 @@ and needs no audio.
 | `js/catalog.js` | Album pages, album badge art, layer icons |
 | `js/main.js` | UI wiring, keyboard and pointer input, share links |
 | `js/version.js` | App version |
-| `tools/build-stems.mjs` | WAV → Ogg conversion and `stems.json` manifest |
+| `tools/build-stems.mjs` | WAV → Ogg and FLAC copies, and the `stems.json` manifest (with loudness) |
 | `tools/deploy.mjs` | Builds `dist/` and deploys it with Wrangler |
 | `wrangler.jsonc` | Cloudflare config: Worker name, assets folder, custom domain |
 | `serve.mjs` | Zero-dependency local dev server (Node) |

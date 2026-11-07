@@ -33,6 +33,7 @@ const wheel = createWheel($('#wheel'), {
   onFocusChange(song) {
     ui.peek = song;
     renderHub();
+    E.prefetch(ui.layer, null); // moved on: the last song's pre-render stops
     if (song && matchMedia('(hover: hover)').matches) {
       setTimeout(() => { if (ui.peek === song && E.stemTypeFor(ui.layer, song)) E.prefetch(ui.layer, song); }, 350);
     }
@@ -749,7 +750,8 @@ async function boot() {
   bindWheelDrag();
   // Browsers only start audio after a click or key press, and a share link builds the mix
   // before any. Wake the audio on the first one, whatever it is.
-  const wake = () => { if (E.ctx && E.ctx.state !== 'running') E.ctx.resume().catch(() => {}); };
+  // A stretch worker starts then too, so the first pick doesn't wait for one to load.
+  const wake = () => { E.warmUp(); if (E.ctx && E.ctx.state !== 'running') E.ctx.resume().catch(() => {}); };
   // On touch screens only the end of a tap counts as the click that allows it.
   ['pointerdown', 'pointerup', 'touchend', 'keydown'].forEach((ev) => addEventListener(ev, wake, { capture: true }));
 

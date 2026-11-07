@@ -11,6 +11,28 @@
     "oggs": {
       "all": "stems-ogg/Alive/Alive - All (Bbm 129).ogg",
       "lead": "stems-ogg/Alive/Alive - Lead (Bbm 129).ogg"
+    },
+    "flacs": {
+      "all": "stems-flac/Alive/Alive - All (Bbm 129).flac",
+      "lead": "stems-flac/Alive/Alive - Lead (Bbm 129).flac"
+    },
+    "lufs": {
+      "all": -12.39,
+      "lead": -11.85
+    },
+    "frames": {
+      "all": 2625488,
+      "lead": 2625488
+    },
+    "marks": {
+      "all": [
+        512773,
+        11136
+      ],
+      "lead": [
+        2112986,
+        19360
+      ]
     }
   },
   "Around The World": {
@@ -25,6 +47,28 @@
     "oggs": {
       "groove": "stems-ogg/Around The World/Around The World - Groove (Em 121).ogg",
       "lead": "stems-ogg/Around The World/Around The World - Lead (Em 121).ogg"
+    },
+    "flacs": {
+      "groove": "stems-flac/Around The World/Around The World - Groove (Em 121).flac",
+      "lead": "stems-flac/Around The World/Around The World - Lead (Em 121).flac"
+    },
+    "lufs": {
+      "groove": -11.89,
+      "lead": -12.21
+    },
+    "frames": {
+      "groove": 2799075,
+      "lead": 2799075
+    },
+    "marks": {
+      "groove": [
+        1683450,
+        6680
+      ],
+      "lead": [
+        207515,
+        4204
+      ]
     }
   },
   "Contact": {
@@ -39,6 +83,28 @@
     "oggs": {
       "groove": "stems-ogg/Contact/Contact - Groove (Bm 124).ogg",
       "texture": "stems-ogg/Contact/Contact - Texture (Bm 124).ogg"
+    },
+    "flacs": {
+      "groove": "stems-flac/Contact/Contact - Groove (Bm 124).flac",
+      "texture": "stems-flac/Contact/Contact - Texture (Bm 124).flac"
+    },
+    "lufs": {
+      "groove": -12.4,
+      "texture": -12.15
+    },
+    "frames": {
+      "groove": 2731355,
+      "texture": 2731355
+    },
+    "marks": {
+      "groove": [
+        2289014,
+        18563
+      ],
+      "texture": [
+        1934421,
+        19143
+      ]
     }
   },
   "Da Funk": {
@@ -53,6 +119,28 @@
     "oggs": {
       "groove": "stems-ogg/Da Funk/Da Funk - Groove (Gm 111).ogg",
       "lead": "stems-ogg/Da Funk/Da Funk - Lead (Gm 111).ogg"
+    },
+    "flacs": {
+      "groove": "stems-flac/Da Funk/Da Funk - Groove (Gm 111).flac",
+      "lead": "stems-flac/Da Funk/Da Funk - Lead (Gm 111).flac"
+    },
+    "lufs": {
+      "groove": -12.69,
+      "lead": -11.94
+    },
+    "frames": {
+      "groove": 3051243,
+      "lead": 3051243
+    },
+    "marks": {
+      "groove": [
+        643927,
+        8333
+      ],
+      "lead": [
+        882177,
+        14867
+      ]
     }
   },
   "Digital Love": {
@@ -65,6 +153,21 @@
     },
     "oggs": {
       "groove": "stems-ogg/Digital Love/Digital Love - Groove (A 125).ogg"
+    },
+    "flacs": {
+      "groove": "stems-flac/Digital Love/Digital Love - Groove (A 125).flac"
+    },
+    "lufs": {
+      "groove": -11.74
+    },
+    "frames": {
+      "groove": 2709504
+    },
+    "marks": {
+      "groove": [
+        1608795,
+        10902
+      ]
     }
   },
   "Doin' It Right": {
@@ -81,6 +184,35 @@
       "groove": "stems-ogg/Doin' It Right/Doin' It Right - Groove (Ebm 89).ogg",
       "lead": "stems-ogg/Doin' It Right/Doin' It Right - Lead (Ebm 89).ogg",
       "texture": "stems-ogg/Doin' It Right/Doin' It Right - Texture (Ebm 89).ogg"
+    },
+    "flacs": {
+      "groove": "stems-flac/Doin' It Right/Doin' It Right - Groove (Ebm 89).flac",
+      "lead": "stems-flac/Doin' It Right/Doin' It Right - Lead (Ebm 89).flac",
+      "texture": "stems-flac/Doin' It Right/Doin' It Right - Texture (Ebm 89).flac"
+    },
+    "lufs": {
+      "groove": -13.83,
+      "lead": -10.08,
+      "texture": -13.55
+    },
+    "frames": {
+      "groove": 3805483,
+      "lead": 3805483,
+      "texture": 3805483
+    },
+    "marks": {
+      "groove": [
+        2252279,
+        3032
+      ],
+      "lead": [
+        1902768,
+        2101
+      ],
+      "texture": [
+        1427081,
+        3746
+      ]
     }
   },
   "Get Lucky": {
@@ -97,6 +229,35 @@
       "groove": "stems-ogg/Get Lucky/Get Lucky - Groove (Gbm 116).ogg",
       "lead": "stems-ogg/Get Lucky/Get Lucky - Lead (Gbm 116).ogg",
       "texture": "stems-ogg/Get Lucky/Get Lucky - Texture (Gbm 116).ogg"
+    },
+    "flacs": {
+      "groove": "stems-flac/Get Lucky/Get Lucky - Groove (Gbm 116).flac",
+      "lead": "stems-flac/Get Lucky/Get Lucky - Lead (Gbm 116).flac",
+      "texture": "stems-flac/Get Lucky/Get Lucky - Texture (Gbm 116).flac"
+    },
+    "lufs": {
+      "groove": -12.94,
+      "lead": -11.58,
+      "texture": -13.41
+    },
+    "frames": {
+      "groove": 2919724,
+      "lead": 2919724,
+      "texture": 2919724
+    },
+    "marks": {
+      "groove": [
+        2303998,
+        6949
+      ],
+      "lead": [
+        284613,
+        2168
+      ],
+      "texture": [
+        1619682,
+        13622
+      ]
     }
   },
   "Giorgio By Moroder": {
@@ -113,6 +274,35 @@
       "groove": "stems-ogg/Giorgio By Moroder/Giorgio By Moroder - Groove (Am 113).ogg",
       "lead": "stems-ogg/Giorgio By Moroder/Giorgio By Moroder - Lead (Am 113).ogg",
       "texture": "stems-ogg/Giorgio By Moroder/Giorgio By Moroder - Texture (Am 113).ogg"
+    },
+    "flacs": {
+      "groove": "stems-flac/Giorgio By Moroder/Giorgio By Moroder - Groove (Am 113).flac",
+      "lead": "stems-flac/Giorgio By Moroder/Giorgio By Moroder - Lead (Am 113).flac",
+      "texture": "stems-flac/Giorgio By Moroder/Giorgio By Moroder - Texture (Am 113).flac"
+    },
+    "lufs": {
+      "groove": -12.66,
+      "lead": -12.84,
+      "texture": -16.62
+    },
+    "frames": {
+      "groove": 2997239,
+      "lead": 2997239,
+      "texture": 2997239
+    },
+    "marks": {
+      "groove": [
+        1428014,
+        11686
+      ],
+      "lead": [
+        1972464,
+        18109
+      ],
+      "texture": [
+        2300292,
+        3225
+      ]
     }
   },
   "Give Life Back To Music": {
@@ -129,6 +319,35 @@
       "groove": "stems-ogg/Give Life Back To Music/Give Life Back To Music - Groove (Am 119).ogg",
       "lead": "stems-ogg/Give Life Back To Music/Give Life Back To Music - Lead (Am 119).ogg",
       "texture": "stems-ogg/Give Life Back To Music/Give Life Back To Music - Texture (Am 119).ogg"
+    },
+    "flacs": {
+      "groove": "stems-flac/Give Life Back To Music/Give Life Back To Music - Groove (Am 119).flac",
+      "lead": "stems-flac/Give Life Back To Music/Give Life Back To Music - Lead (Am 119).flac",
+      "texture": "stems-flac/Give Life Back To Music/Give Life Back To Music - Texture (Am 119).flac"
+    },
+    "lufs": {
+      "groove": -13.64,
+      "lead": -13.32,
+      "texture": -13.78
+    },
+    "frames": {
+      "groove": 2846118,
+      "lead": 2846118,
+      "texture": 2846118
+    },
+    "marks": {
+      "groove": [
+        1267242,
+        8517
+      ],
+      "lead": [
+        2823635,
+        14607
+      ],
+      "texture": [
+        305932,
+        10071
+      ]
     }
   },
   "Harder Better Faster Stronger": {
@@ -143,6 +362,28 @@
     "oggs": {
       "groove": "stems-ogg/Harder Better Faster Stronger/Harder Better Faster Stronger - Groove (Gbm 123).ogg",
       "lead": "stems-ogg/Harder Better Faster Stronger/Harder Better Faster Stronger - Lead (Gbm 123).ogg"
+    },
+    "flacs": {
+      "groove": "stems-flac/Harder Better Faster Stronger/Harder Better Faster Stronger - Groove (Gbm 123).flac",
+      "lead": "stems-flac/Harder Better Faster Stronger/Harder Better Faster Stronger - Lead (Gbm 123).flac"
+    },
+    "lufs": {
+      "groove": -12.72,
+      "lead": -11.6
+    },
+    "frames": {
+      "groove": 2753561,
+      "lead": 2753561
+    },
+    "marks": {
+      "groove": [
+        2689172,
+        11506
+      ],
+      "lead": [
+        364350,
+        2027
+      ]
     }
   },
   "Harder Better Faster Stronger (Alive 2007)": {
@@ -155,6 +396,21 @@
     },
     "oggs": {
       "lead": "stems-ogg/Harder Better Faster Stronger (Alive 2007)/Harder Better Faster Stronger (Alive 2007) - Lead (Fm 123).ogg"
+    },
+    "flacs": {
+      "lead": "stems-flac/Harder Better Faster Stronger (Alive 2007)/Harder Better Faster Stronger (Alive 2007) - Lead (Fm 123).flac"
+    },
+    "lufs": {
+      "lead": -15.81
+    },
+    "frames": {
+      "lead": 2753561
+    },
+    "marks": {
+      "lead": [
+        1505591,
+        1614
+      ]
     }
   },
   "Human After All": {
@@ -169,6 +425,28 @@
     "oggs": {
       "groove": "stems-ogg/Human After All/Human After All - Groove (Bm 136).ogg",
       "lead": "stems-ogg/Human After All/Human After All - Lead (Bm 136).ogg"
+    },
+    "flacs": {
+      "groove": "stems-flac/Human After All/Human After All - Groove (Bm 136).flac",
+      "lead": "stems-flac/Human After All/Human After All - Lead (Bm 136).flac"
+    },
+    "lufs": {
+      "groove": -12.03,
+      "lead": -12.96
+    },
+    "frames": {
+      "groove": 2490353,
+      "lead": 2490353
+    },
+    "marks": {
+      "groove": [
+        272728,
+        10480
+      ],
+      "lead": [
+        1634119,
+        6424
+      ]
     }
   },
   "I Feel It Coming": {
@@ -185,6 +463,35 @@
       "groove": "stems-ogg/I Feel It Coming/I Feel It Coming - Groove (Cm 93).ogg",
       "lead": "stems-ogg/I Feel It Coming/I Feel It Coming - Lead (Cm 93).ogg",
       "texture": "stems-ogg/I Feel It Coming/I Feel It Coming - Texture (Cm 93).ogg"
+    },
+    "flacs": {
+      "groove": "stems-flac/I Feel It Coming/I Feel It Coming - Groove (Cm 93).flac",
+      "lead": "stems-flac/I Feel It Coming/I Feel It Coming - Lead (Cm 93).flac",
+      "texture": "stems-flac/I Feel It Coming/I Feel It Coming - Texture (Cm 93).flac"
+    },
+    "lufs": {
+      "groove": -13.31,
+      "lead": -12.16,
+      "texture": -15.5
+    },
+    "frames": {
+      "groove": 3641807,
+      "lead": 3641807,
+      "texture": 3641807
+    },
+    "marks": {
+      "groove": [
+        2689173,
+        11730
+      ],
+      "lead": [
+        732390,
+        18642
+      ],
+      "texture": [
+        28807,
+        11341
+      ]
     }
   },
   "Infinity Repeating": {
@@ -201,6 +508,35 @@
       "groove": "stems-ogg/Infinity Repeating/Infinity Repeating - Groove (Bbm 110).ogg",
       "lead": "stems-ogg/Infinity Repeating/Infinity Repeating - Lead (Bbm 110).ogg",
       "texture": "stems-ogg/Infinity Repeating/Infinity Repeating - Texture (Bbm 110).ogg"
+    },
+    "flacs": {
+      "groove": "stems-flac/Infinity Repeating/Infinity Repeating - Groove (Bbm 110).flac",
+      "lead": "stems-flac/Infinity Repeating/Infinity Repeating - Lead (Bbm 110).flac",
+      "texture": "stems-flac/Infinity Repeating/Infinity Repeating - Texture (Bbm 110).flac"
+    },
+    "lufs": {
+      "groove": -13.2,
+      "lead": -12.11,
+      "texture": -14.71
+    },
+    "frames": {
+      "groove": 3078982,
+      "lead": 3078982,
+      "texture": 3078982
+    },
+    "marks": {
+      "groove": [
+        1467353,
+        6790
+      ],
+      "lead": [
+        570202,
+        7821
+      ],
+      "texture": [
+        3066142,
+        20902
+      ]
     }
   },
   "Instant Crush": {
@@ -217,6 +553,35 @@
       "groove": "stems-ogg/Instant Crush/Instant Crush - Groove (Bbm 110).ogg",
       "lead": "stems-ogg/Instant Crush/Instant Crush - Lead (Bbm 110).ogg",
       "texture": "stems-ogg/Instant Crush/Instant Crush - Texture (Bbm 110).ogg"
+    },
+    "flacs": {
+      "groove": "stems-flac/Instant Crush/Instant Crush - Groove (Bbm 110).flac",
+      "lead": "stems-flac/Instant Crush/Instant Crush - Lead (Bbm 110).flac",
+      "texture": "stems-flac/Instant Crush/Instant Crush - Texture (Bbm 110).flac"
+    },
+    "lufs": {
+      "groove": -13.38,
+      "lead": -11.82,
+      "texture": -13.21
+    },
+    "frames": {
+      "groove": 3078982,
+      "lead": 3078982,
+      "texture": 3078982
+    },
+    "marks": {
+      "groove": [
+        1202753,
+        11098
+      ],
+      "lead": [
+        2633934,
+        10364
+      ],
+      "texture": [
+        2970268,
+        15500
+      ]
     }
   },
   "Lose Yourself To Dance": {
@@ -233,6 +598,35 @@
       "groove": "stems-ogg/Lose Yourself To Dance/Lose Yourself To Dance - Groove (Bbm 100).ogg",
       "lead": "stems-ogg/Lose Yourself To Dance/Lose Yourself To Dance - Lead (Bbm 100).ogg",
       "texture": "stems-ogg/Lose Yourself To Dance/Lose Yourself To Dance - Texture (Bbm 100).ogg"
+    },
+    "flacs": {
+      "groove": "stems-flac/Lose Yourself To Dance/Lose Yourself To Dance - Groove (Bbm 100).flac",
+      "lead": "stems-flac/Lose Yourself To Dance/Lose Yourself To Dance - Lead (Bbm 100).flac",
+      "texture": "stems-flac/Lose Yourself To Dance/Lose Yourself To Dance - Texture (Bbm 100).flac"
+    },
+    "lufs": {
+      "groove": -11.95,
+      "lead": -12.8,
+      "texture": -14.88
+    },
+    "frames": {
+      "groove": 3386880,
+      "lead": 3386880,
+      "texture": 3386880
+    },
+    "marks": {
+      "groove": [
+        2857686,
+        7063
+      ],
+      "lead": [
+        318664,
+        2506
+      ],
+      "texture": [
+        39759,
+        3951
+      ]
     }
   },
   "One More Time": {
@@ -249,6 +643,35 @@
       "groove": "stems-ogg/One More Time/One More Time - Groove (Bm 123).ogg",
       "lead": "stems-ogg/One More Time/One More Time - Lead (Bm 123).ogg",
       "texture": "stems-ogg/One More Time/One More Time - Texture (Bm 123).ogg"
+    },
+    "flacs": {
+      "groove": "stems-flac/One More Time/One More Time - Groove (Bm 123).flac",
+      "lead": "stems-flac/One More Time/One More Time - Lead (Bm 123).flac",
+      "texture": "stems-flac/One More Time/One More Time - Texture (Bm 123).flac"
+    },
+    "lufs": {
+      "groove": -14.54,
+      "lead": -12.12,
+      "texture": -14.55
+    },
+    "frames": {
+      "groove": 2753561,
+      "lead": 2753561,
+      "texture": 2753561
+    },
+    "marks": {
+      "groove": [
+        2667673,
+        15512
+      ],
+      "lead": [
+        1967892,
+        1574
+      ],
+      "texture": [
+        1139990,
+        18829
+      ]
     }
   },
   "Robot Rock": {
@@ -263,6 +686,28 @@
     "oggs": {
       "groove": "stems-ogg/Robot Rock/Robot Rock - Groove (Dm 112).ogg",
       "texture": "stems-ogg/Robot Rock/Robot Rock - Texture (Dm 112).ogg"
+    },
+    "flacs": {
+      "groove": "stems-flac/Robot Rock/Robot Rock - Groove (Dm 112).flac",
+      "texture": "stems-flac/Robot Rock/Robot Rock - Texture (Dm 112).flac"
+    },
+    "lufs": {
+      "groove": -11.41,
+      "texture": -15.76
+    },
+    "frames": {
+      "groove": 3024000,
+      "texture": 3024000
+    },
+    "marks": {
+      "groove": [
+        1182819,
+        15784
+      ],
+      "texture": [
+        756000,
+        2012
+      ]
     }
   },
   "Something About Us": {
@@ -279,6 +724,35 @@
       "groove": "stems-ogg/Something About Us/Something About Us - Groove (Dm 100).ogg",
       "lead": "stems-ogg/Something About Us/Something About Us - Lead (Dm 100).ogg",
       "texture": "stems-ogg/Something About Us/Something About Us - Texture (Dm 100).ogg"
+    },
+    "flacs": {
+      "groove": "stems-flac/Something About Us/Something About Us - Groove (Dm 100).flac",
+      "lead": "stems-flac/Something About Us/Something About Us - Lead (Dm 100).flac",
+      "texture": "stems-flac/Something About Us/Something About Us - Texture (Dm 100).flac"
+    },
+    "lufs": {
+      "groove": -13.66,
+      "lead": -13.86,
+      "texture": -17.08
+    },
+    "frames": {
+      "groove": 3386880,
+      "lead": 3386880,
+      "texture": 3386880
+    },
+    "marks": {
+      "groove": [
+        2407721,
+        8994
+      ],
+      "lead": [
+        1399185,
+        6304
+      ],
+      "texture": [
+        1058642,
+        17546
+      ]
     }
   },
   "Starboy": {
@@ -295,6 +769,35 @@
       "groove": "stems-ogg/Starboy/Starboy - Groove (Am 93).ogg",
       "lead": "stems-ogg/Starboy/Starboy - Lead (Am 93).ogg",
       "texture": "stems-ogg/Starboy/Starboy - Texture (Am 93).ogg"
+    },
+    "flacs": {
+      "groove": "stems-flac/Starboy/Starboy - Groove (Am 93).flac",
+      "lead": "stems-flac/Starboy/Starboy - Lead (Am 93).flac",
+      "texture": "stems-flac/Starboy/Starboy - Texture (Am 93).flac"
+    },
+    "lufs": {
+      "groove": -10.7,
+      "lead": -13.43,
+      "texture": -14.4
+    },
+    "frames": {
+      "groove": 3641806,
+      "lead": 3641806,
+      "texture": 3641806
+    },
+    "marks": {
+      "groove": [
+        156354,
+        17699
+      ],
+      "lead": [
+        1165341,
+        8323
+      ],
+      "texture": [
+        1990741,
+        4278
+      ]
     }
   },
   "Technologic": {
@@ -309,6 +812,28 @@
     "oggs": {
       "groove": "stems-ogg/Technologic/Technologic - Groove (A 127).ogg",
       "lead": "stems-ogg/Technologic/Technologic - Lead (A 127).ogg"
+    },
+    "flacs": {
+      "groove": "stems-flac/Technologic/Technologic - Groove (A 127).flac",
+      "lead": "stems-flac/Technologic/Technologic - Lead (A 127).flac"
+    },
+    "lufs": {
+      "groove": -12.19,
+      "lead": -13.54
+    },
+    "frames": {
+      "groove": 2666835,
+      "lead": 2666835
+    },
+    "marks": {
+      "groove": [
+        2369980,
+        1900
+      ],
+      "lead": [
+        2458630,
+        5818
+      ]
     }
   },
   "Too Long": {
@@ -321,6 +846,21 @@
     },
     "oggs": {
       "groove": "stems-ogg/Too Long/Too Long - Groove (Fm 127).ogg"
+    },
+    "flacs": {
+      "groove": "stems-flac/Too Long/Too Long - Groove (Fm 127).flac"
+    },
+    "lufs": {
+      "groove": -11.97
+    },
+    "frames": {
+      "groove": 2666835
+    },
+    "marks": {
+      "groove": [
+        1229434,
+        18592
+      ]
     }
   },
   "Too Long (Alive 2007)": {
@@ -335,6 +875,28 @@
     "oggs": {
       "groove": "stems-ogg/Too Long (Alive 2007)/Too Long (Alive 2007) - Groove (Fm 127).ogg",
       "texture": "stems-ogg/Too Long (Alive 2007)/Too Long (Alive 2007) - Texture (Fm 127).ogg"
+    },
+    "flacs": {
+      "groove": "stems-flac/Too Long (Alive 2007)/Too Long (Alive 2007) - Groove (Fm 127).flac",
+      "texture": "stems-flac/Too Long (Alive 2007)/Too Long (Alive 2007) - Texture (Fm 127).flac"
+    },
+    "lufs": {
+      "groove": -11.05,
+      "texture": -13.82
+    },
+    "frames": {
+      "groove": 2666835,
+      "texture": 2666835
+    },
+    "marks": {
+      "groove": [
+        562583,
+        15043
+      ],
+      "texture": [
+        457867,
+        13364
+      ]
     }
   },
   "Voyager": {
@@ -351,6 +913,35 @@
       "groove": "stems-ogg/Voyager/Voyager - Groove (Em 121).ogg",
       "lead": "stems-ogg/Voyager/Voyager - Lead (Em 121).ogg",
       "texture": "stems-ogg/Voyager/Voyager - Texture (Em 121).ogg"
+    },
+    "flacs": {
+      "groove": "stems-flac/Voyager/Voyager - Groove (Em 121).flac",
+      "lead": "stems-flac/Voyager/Voyager - Lead (Em 121).flac",
+      "texture": "stems-flac/Voyager/Voyager - Texture (Em 121).flac"
+    },
+    "lufs": {
+      "groove": -13.05,
+      "lead": -13.71,
+      "texture": -14.76
+    },
+    "frames": {
+      "groove": 2799075,
+      "lead": 2799075,
+      "texture": 2799075
+    },
+    "marks": {
+      "groove": [
+        459273,
+        14203
+      ],
+      "lead": [
+        1191936,
+        17350
+      ],
+      "texture": [
+        743576,
+        10306
+      ]
     }
   }
 }

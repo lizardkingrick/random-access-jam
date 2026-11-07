@@ -9,12 +9,12 @@ The Worker is named `dream-chamber-remixed` and serves the domain `dreamchamberr
 Both are set in `wrangler.jsonc`. The stems are uploaded straight from your machine; they never
 go through git. Unchanged files are skipped on each deploy, so updates that touch only the code
 are quick. You need [Node.js](https://nodejs.org) 18+, plus [ffmpeg](https://ffmpeg.org) on your
-PATH to build the Ogg stems (`npm run stems`) the first time or when the stems change.
+PATH to build the Ogg and FLAC stems (`npm run stems`) the first time or when the stems change.
 
 ```
 # one time only
 npm install
-npm run stems -- --stems "D:\path\to\Stems"   # Ogg copies + stems.json
+npm run stems -- --stems "D:\path\to\Stems"   # Ogg + FLAC copies, stems.json
 npx wrangler login           # or set CLOUDFLARE_API_TOKEN (template: Edit Cloudflare Workers)
 
 # every release

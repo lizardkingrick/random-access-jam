@@ -87,7 +87,7 @@ serves the folder above the repo, so never put it behind a proxy.
 
 ```
 npm install
-npm run stems     # converts the WAV stems to Ogg and writes stems.json
+npm run stems     # converts the WAV stems to Ogg and FLAC and writes stems.json
 npm run dev       # http://localhost:8137/webapp/
 ```
 

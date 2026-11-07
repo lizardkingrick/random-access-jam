@@ -12,10 +12,36 @@
   Wah's speed (a bar to half a beat) and depth, and Tape stop's length (a beat to a bar) and how
   far it slows. Lengths and speeds are in beats and bars, so the effects stay on the beat.
   Changing one while holding FX is heard at once (Tape stop's at the next press). Each effect
-  keeps its settings on the device; the defaults are the effects as they were
+  keeps its settings on the device; the defaults are the effects as they were (except Stutter's,
+  see below)
 - Phones held upright: the effect settings button sits just left of the FX button, which is the
   same size, lined up with it, and says "FX" with a mouse too (no "(Hold)" under it); tempo and
   key share the rest of the row
+- Auto tempo: every pick, Random or clear sets the tempo to the average of the songs in the mix
+  (rounded), and everything moves to it together on one bar line. A tempo set with Z / C holds
+  until the next stem change, and a share link keeps its own. On phones and tablets the tempo
+  stays put when the average moves by 2 BPM or less, which saves re-stretching every layer
+- Stutter follows the tempo: a new Auto length (the default) repeats 16th notes, or 32nd notes
+  below 85 BPM, so about 7-11 repeats a second instead of 3-5, and the gate is open for 90% of
+  each repeat instead of 62%. Letting go no longer clicks, the repeats stay on the beat however
+  long the music has played, and changing the length or tempo while holding keeps the sound
+- Safari and iPhones stay in sync: they play at the device's own sample rate with a safer
+  scheduling margin, a start that would come late moves to the next beat instead, and they load
+  lossless FLAC copies of the stems (exact to the sample). Every Ogg is checked against its known
+  length when it loads and swapped for the FLAC if it doesn't match
+- Older Safari (before 18.4) gets sound on the hosted site: it can't play the Ogg stems, so it
+  gets the FLAC copies (`npm run stems` now builds both, and the deploy ships them)
+- Smoother switching on phones: at most two stretch workers (three for picks on phones with 8
+  cores and 6 GB or more), the true-peak limiter costs about a third of what it did, and no task
+  during a switch holds the page for more than 50 ms
+- Better-sounding stretches on desktops: a few seconds after a pick, Lead and Extra layers (and
+  full mixes) are re-stretched with a phase vocoder that keeps held chords and pads steady, and
+  swapped in on a bar line. Sung leads moved to another key keep a natural voice instead of
+  sounding chipmunked or slowed. Phones and low-end computers keep the fast stretch
+- Faster picks: the first pick sounds in about 0.25-0.35 s (it was 0.35-0.6 s), a song you hover
+  over is stretched ahead so it's ready at once, and a reload or share link plays the last mix in
+  about 0.15 s, as its stretched stems are kept in the browser. Stems take half the memory, and
+  their loudness is measured when they're built instead of in the browser
 
 ## 1.2.0-beta (2026-11-06)
 
